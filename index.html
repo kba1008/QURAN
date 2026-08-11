@@ -255,6 +255,93 @@
     .ring,.vu{width:78px;height:78px}
     .mic-wrap::before{width:104px;height:104px}
   }
+
+  /* ============================================================
+     NAIK TARAF PAPARAN — RUPA KORPORAT & PREMIUM (v14)
+     ============================================================ */
+  body{
+    background:
+      radial-gradient(1200px 700px at 12% -10%, var(--glow1), transparent 60%),
+      radial-gradient(900px 600px at 105% 0%, var(--glow2), transparent 55%),
+      var(--bg);
+    letter-spacing:.1px;
+  }
+  .wrap{max-width:940px}
+  header{
+    position:sticky; top:0; z-index:40;
+    backdrop-filter:saturate(160%) blur(14px);
+    -webkit-backdrop-filter:saturate(160%) blur(14px);
+    background:color-mix(in oklab, var(--bg) 78%, transparent);
+    border-bottom:1px solid var(--line);
+    padding:12px 14px; margin:0 -14px 16px; border-radius:0;
+  }
+  .brand .logo{
+    background:linear-gradient(145deg, var(--gold), color-mix(in oklab, var(--gold) 45%, #000));
+    color:#12100b; border:none; box-shadow:0 10px 24px -14px var(--gold);
+    border-radius:14px;
+  }
+  .brand h1{font-weight:800; letter-spacing:-.4px}
+  .brand p{font-size:11.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted)}
+  .pill{
+    border:1px solid var(--line); background:var(--soft); color:var(--muted);
+    font-size:11px; letter-spacing:.1em; text-transform:uppercase; font-weight:700;
+    padding:6px 11px; border-radius:999px;
+  }
+  .pill.live{color:var(--green); border-color:color-mix(in oklab, var(--green) 40%, transparent)}
+  .pill.aq.good{color:var(--green); border-color:color-mix(in oklab, var(--green) 35%, transparent)}
+  .pill.aq.warn{color:var(--gold); border-color:color-mix(in oklab, var(--gold) 40%, transparent)}
+  .icon-btn{border-radius:12px; border:1px solid var(--line); background:var(--soft)}
+  .icon-btn:hover{background:color-mix(in oklab, var(--gold) 12%, transparent)}
+
+  .card{
+    position:relative; overflow:hidden;
+    background:linear-gradient(180deg, color-mix(in oklab, var(--panel) 96%, transparent), var(--panel-2));
+    border:1px solid var(--line);
+    border-radius:calc(var(--radius) + 4px);
+    box-shadow:0 30px 70px -50px rgba(0,0,0,.85), inset 0 1px 0 color-mix(in oklab, #fff 6%, transparent);
+  }
+  .card::before{
+    content:""; position:absolute; inset:0 0 auto 0; height:2px;
+    background:linear-gradient(90deg, transparent, var(--gold), transparent); opacity:.55;
+  }
+  select, input[type="text"], input[type="number"]{
+    border-radius:12px; border:1px solid var(--line); background:var(--field);
+  }
+  .meta{font-size:11.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); font-weight:700}
+  #score{color:var(--gold)}
+  .bar{height:6px; border-radius:999px; background:var(--soft); overflow:hidden}
+  .bar > i{background:linear-gradient(90deg, var(--green), var(--gold))}
+  .status{
+    border-left:3px solid color-mix(in oklab, var(--gold) 65%, transparent);
+    background:var(--soft); border-radius:10px; padding:10px 12px;
+  }
+  .legend{font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted)}
+  .trans{line-height:1.85}
+
+  .btn{
+    border-radius:14px; border:1px solid var(--line);
+    background:linear-gradient(180deg, color-mix(in oklab, var(--panel-2) 92%, transparent), var(--panel));
+    box-shadow:0 10px 24px -20px #000; font-weight:700;
+  }
+  .dock{
+    backdrop-filter:saturate(160%) blur(16px);
+    -webkit-backdrop-filter:saturate(160%) blur(16px);
+    background:color-mix(in oklab, var(--bg) 72%, transparent);
+    border-top:1px solid var(--line);
+  }
+  .mic{
+    background:linear-gradient(160deg, var(--gold), color-mix(in oklab, var(--gold) 40%, #000));
+    color:#14110a; border:none;
+    box-shadow:0 22px 46px -22px var(--gold), inset 0 1px 0 rgba(255,255,255,.35);
+  }
+  .mic-wrap.voice .mic{
+    background:linear-gradient(160deg, var(--green), color-mix(in oklab, var(--green) 40%, #000));
+    box-shadow:0 22px 46px -20px var(--green), inset 0 1px 0 rgba(255,255,255,.3);
+  }
+  details.grp{border:1px solid var(--line); border-radius:14px; background:var(--soft)}
+  details.grp > summary{font-weight:800; letter-spacing:.02em}
+  .sheet{backdrop-filter:blur(10px)}
+
 </style>
 
 </head>
@@ -268,6 +355,7 @@
     <button class="icon-btn" id="hdr-toggle" aria-label="Tunjuk / sembunyi butang atas" title="Tunjuk / sembunyi butang atas">☰</button>
     <div class="hdr-right">
       <span class="pill" id="state">Sedia</span>
+      <span class="pill aq" id="audio-q" hidden>Audio</span>
       <button class="icon-btn" id="bm-add" aria-label="Simpan penanda">🔖</button>
       <button class="icon-btn" id="bm-open" aria-label="Senarai penanda">📑</button>
       <button class="icon-btn" id="open-set" aria-label="Tetapan">⚙</button>
@@ -379,7 +467,10 @@
         <div class="switch"><span>Wajib ulang perkataan salah sehingga betul (mod latih tubi)</span><div class="tg" id="tg-drill"></div></div>
         <div class="switch"><span>Mainkan bacaan betul bila salah</span><div class="tg" id="tg-autofix"></div></div>
         <div class="switch"><span>Mod bebas: salah kekal merah, betulkan sekali sahaja &amp; teruskan bacaan</span><div class="tg" id="tg-freeflow"></div></div>
-        <div class="switch"><span>Guru tegas (bip bila salah)</span><div class="tg" id="tg-strict"></div></div>
+        <div class="switch"><span>Guru tegas (tanda bila salah)</span><div class="tg" id="tg-strict"></div></div>
+        <div class="switch"><span>Bunyi isyarat bip (matikan untuk bacaan senyap)</span><div class="tg" id="tg-sfx"></div></div>
+        <div class="switch"><span>Pemprosesan audio canggih (penapis bising + pengesan suara)</span><div class="tg" id="tg-dsp"></div></div>
+        <div class="switch"><span>Guna pemprosesan audio pada telefon (eksperimen)</span><div class="tg" id="tg-dspmobile"></div></div>
         <div class="switch"><span>Auto buka mikrofon selepas app habis bercakap</span><div class="tg" id="tg-automic"></div></div>
         <div class="fld">
           <label>Ketegasan semakan (toleransi sebutan): <b id="tol-val">72</b>%</label>
@@ -648,7 +739,8 @@ const DEFAULTS = {
   repeat:3, size:32, tsize:15, rate:1, tol:72, voice:"",
   qari:"ar.alafasy", arate:1, autoFix:true, autoPlay:false,
   theme:"emerald", tajwid:true, autoMic:true, mustCorrect:true, transDelay:1000, keepAwake:true,
-  drill:true, transPos:"ayat", freeFlow:false, wbw:false, hideHdr:true
+  drill:true, transPos:"ayat", freeFlow:false, wbw:false, hideHdr:true,
+  sfx:false, dsp:true, dspMobile:false
 
 };
 let profile = LS.get("tasmi.profile","Pengguna");
@@ -686,6 +778,7 @@ const TOL = () => S.tol/100;
 /* ============ 4. BUNYI BIP ============ */
 let actx;
 function beep(type){
+  if(!S.sfx) return;                                        // bunyi isyarat dimatikan (lalai)
   if(typeof listening!=="undefined" && listening) return;   // senyap semasa mendengar
   try{
     actx = actx || new (window.AudioContext||window.webkitAudioContext)();
@@ -795,13 +888,21 @@ function playWord(tokenIdx, ayahIdx){
 
 /* ============ 4c. AUTO MIC (jeda & sambung semula automatik) ============ */
 let micAuto = false;      // true bila mic dijeda oleh app sendiri
+let micMuted = false;     // mikrofon dibisukan sementara (tanpa menutup pengecaman)
+let muteTimer = null;
+/* Dahulu app MENUTUP pengecaman suara setiap kali audio dimainkan — itulah punca
+   bunyi "bib" pelayar berulang kali. Kini kita hanya ABAIKAN hasil sementara,
+   jadi sesi mikrofon kekal terbuka dan senyap. */
 function pauseMicAuto(){
-  if(listening){ micAuto = true; stopRec(); }
+  if(listening){ micAuto = true; micMuted = true; clearTimeout(muteTimer); }
 }
 function resumeMicAuto(delay){
-  if(!S.autoMic || !micAuto) return;
-  micAuto = false;
-  setTimeout(()=>{ if(!listening) startRec(); }, delay || 400);
+  clearTimeout(muteTimer);
+  muteTimer = setTimeout(()=>{
+    micMuted = false;
+    if(micAuto && S.autoMic && !listening) startRec();
+    micAuto = false;
+  }, delay || 400);
 }
 
 /* ============ 4d. WARNA HUKUM TAJWID (standard antarabangsa) ============ */
@@ -891,6 +992,15 @@ const $ = id => document.getElementById(id);
 let surahList = SURAH_FALLBACK; // senarai penuh 114 surah, sentiasa lengkap
 let current = null;       // {n,name,ayat:[],ms:[]}
 let aIdx=0, cursor=0, marks=[], listening=false, repDone=0, busy=false;
+/* Rekod kemajuan TERBAIK bagi ayat semasa — perkataan yang sudah hijau kekal hijau
+   walaupun enjin pengecaman membetulkan/mengulang teksnya. */
+let bestCursor = 0, bestMarks = [];
+function keepProgress(){
+  for(let i=0;i<marks.length;i++) if(bestMarks[i]==="ok") marks[i]="ok";
+  let lead = 0; while(lead < marks.length && marks[lead]==="ok") lead++;
+  if(cursor < lead) cursor = lead;
+  bestMarks = marks.slice(); bestCursor = Math.max(bestCursor, cursor);
+}
 let watchdog=null;
 let drillWord=-1, drillAt=0;
 let badTries=0, fixedOnce={};
@@ -1046,6 +1156,8 @@ function scrollTransIntoView(follow){
 function loadAyah(i,resetRep=true){
   if(!current) return;
   stopAudio();
+  ayahSeq++; cancelTranslation();
+  bestCursor = 0; bestMarks = [];
   aIdx = Math.max(0, Math.min(+i || 0, current.ayat.length-1));
   cursor=0; if(resetRep) repDone=0; drillWord=-1; drillAt=0; badTries=0; fixedOnce={};
   marks = new Array(currentAyah().split(/\s+/).filter(Boolean).length).fill(null);
@@ -1056,7 +1168,7 @@ function loadAyah(i,resetRep=true){
   saveResume();
   if(S.autoPlay) setTimeout(()=>playAyah(aIdx), 250);
 }
-function resetAyah(){ cursor=0; marks=marks.map(()=>null); drillWord=-1; drillAt=0; badTries=0; fixedOnce={}; render(); }
+function resetAyah(){ cursor=0; bestCursor=0; bestMarks=[]; marks=marks.map(()=>null); drillWord=-1; drillAt=0; badTries=0; fixedOnce={}; render(); }
 
 function nextAyah(){
   if(aIdx+1 < current.ayat.length) loadAyah(aIdx+1);
@@ -1146,8 +1258,17 @@ function pickVoice(){
       || voices.find(v=>/^id/i.test(v.lang)) || null;
 }
 
-function speakTranslation(done){
-  const text = (current.ms && current.ms[aIdx]) || "";
+let speakSeq = 0;                 // token: batalkan bacaan terjemahan yang sudah luput
+function cancelTranslation(){
+  speakSeq++;
+  try{ if(window.speechSynthesis) speechSynthesis.cancel(); }catch(e){}
+}
+function speakTranslation(done, wantIdx){
+  const idxT = (typeof wantIdx === "number") ? wantIdx : aIdx;
+  // Jangan sekali-kali baca terjemahan ayat lain daripada ayat yang sedang dipapar
+  if(idxT !== aIdx){ done && done(); return; }
+  const mySeq = ++speakSeq;
+  const text = (current.ms && current.ms[idxT]) || "";
   if(!S.speakTrans || !text || !window.speechSynthesis){ done && done(); return; }
   pauseMicAuto();
   setTimeout(()=>scrollTransIntoView(false), 60);
@@ -1163,6 +1284,7 @@ function speakTranslation(done){
 
   let gotBoundary=false, timer=null;
   u.onboundary = (e)=>{
+    if(mySeq !== speakSeq || idxT !== aIdx) return;
     gotBoundary = true;
     let idx = 0;
     for(let i=0;i<starts.length;i++){ if(starts[i] <= e.charIndex) idx=i; else break; }
@@ -1178,7 +1300,14 @@ function speakTranslation(done){
       timer = setInterval(()=>{ renderTrans(i); i++; if(i>=tokens.length) clearInterval(timer); }, per);
     }, 350);
   };
-  const finish = ()=>{ if(timer) clearInterval(timer); renderTrans(-1); resumeMicAuto(600); done && done(); };
+  let finished = false;
+  const finish = ()=>{
+    if(finished) return; finished = true;
+    if(timer) clearInterval(timer);
+    renderTrans(-1); resumeMicAuto(600);
+    if(mySeq !== speakSeq || idxT !== aIdx) return;   // ayat sudah bertukar — jangan teruskan
+    done && done();
+  };
   u.onend = finish; u.onerror = finish;
   speechSynthesis.speak(u);
 }
@@ -1187,10 +1316,16 @@ function speakTranslation(done){
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let rec=null, mediaStream=null, rafId=null;
 
+let ayahSeq = 0;
 function ayahComplete(){
   beep("ok");
   // Auto baca terjemahan bermula 1 saat selepas ayat selesai dibaca
-  const speakSoon = (after)=> setTimeout(()=> speakTranslation(after), S.transDelay || 1000);
+  const myIdx = aIdx, mySeq = ++ayahSeq;
+  const alive = ()=> (mySeq === ayahSeq && aIdx === myIdx);
+  const speakSoon = (after)=> setTimeout(()=>{
+    if(!alive()) return;
+    speakTranslation(()=>{ if(alive()) after && after(); }, myIdx);
+  }, S.transDelay || 1000);
   if(S.hafazan){
     repDone++;
     if(repDone < S.repeat){
@@ -1313,19 +1448,95 @@ function processSpoken(text, isFinal){
   if(finished) ayahComplete();
 }
 
+/* ============ 8b. ENJIN AUDIO CANGGIH (percuma, dalam pelayar) ============
+   Rantaian pemprosesan masa nyata:
+   getUserMedia (AEC + NS + AGC)  →  High-pass 85Hz (buang dengung)
+   →  Notch 50Hz (bunyi bekalan elektrik)  →  Low-pass 7.8kHz (buang desis)
+   →  DynamicsCompressor (samakan kekuatan suara)  →  Analyser (FFT 2048)
+   Daripada analisis itu kami kira: aras RMS (dBFS), lantai bising adaptif,
+   SNR, kadar silang sifar & pusat spektrum untuk VAD (pengesan suara). */
+let dspNodes = null, vadOn = false, noiseFloor = 0.004, lastVoiceAt = 0;
+function audioQuality(){ return $("audio-q"); }
+function setAQ(txt, cls){
+  const el = audioQuality(); if(!el) return;
+  el.hidden = false; el.textContent = txt;
+  el.className = "pill aq " + (cls||"");
+}
 async function startMeter(){
   try{
-    if(isMobile) return;      // di telefon, stream mikrofon berasingan boleh menyekat pengecaman suara
-    if(!mediaStream) mediaStream = await navigator.mediaDevices.getUserMedia({audio:true});
+    if(!S.dsp) return;
+    if(isMobile && !S.dspMobile) return;   // stream berasingan boleh menjejaskan pengecaman di telefon
+    if(!mediaStream){
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio:{
+        echoCancellation:true, noiseSuppression:true, autoGainControl:true,
+        channelCount:1, sampleRate:48000
+      }});
+    }
     actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+    try{ await actx.resume(); }catch(e){}
+
     const src = actx.createMediaStreamSource(mediaStream);
-    const an = actx.createAnalyser(); an.fftSize=512; src.connect(an);
-    const buf = new Uint8Array(an.frequencyBinCount);
+    const hp = actx.createBiquadFilter(); hp.type="highpass"; hp.frequency.value=85; hp.Q.value=.707;
+    const notch = actx.createBiquadFilter(); notch.type="notch"; notch.frequency.value=50; notch.Q.value=12;
+    const lp = actx.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=7800; lp.Q.value=.707;
+    const comp = actx.createDynamicsCompressor();
+    comp.threshold.value=-32; comp.knee.value=26; comp.ratio.value=4;
+    comp.attack.value=.004; comp.release.value=.18;
+    const an = actx.createAnalyser(); an.fftSize=2048; an.smoothingTimeConstant=.75;
+
+    src.connect(hp); hp.connect(notch); notch.connect(lp); lp.connect(comp); comp.connect(an);
+    dspNodes = { src, hp, notch, lp, comp, an };
+
+    const time = new Float32Array(an.fftSize);
+    const freq = new Uint8Array(an.frequencyBinCount);
+    let smooth = 0, qTick = 0;
+
     const tick = ()=>{
-      an.getByteTimeDomainData(buf);
-      let sum=0; for(const b of buf){ const d=(b-128)/128; sum+=d*d; }
-      const lvl = Math.min(1, Math.sqrt(sum/buf.length)*5);
-      $("vu").style.boxShadow = `0 0 0 ${6+lvl*26}px rgba(239,75,93,${.06+lvl*.18})`;
+      an.getFloatTimeDomainData(time);
+      an.getByteFrequencyData(freq);
+
+      // RMS + puncak
+      let sum=0, peak=0, zc=0, prev=time[0];
+      for(let i=0;i<time.length;i++){
+        const v=time[i]; sum+=v*v;
+        const a=Math.abs(v); if(a>peak) peak=a;
+        if((v>=0) !== (prev>=0)) zc++;
+        prev=v;
+      }
+      const rms = Math.sqrt(sum/time.length);
+      const zcr = zc/time.length;
+
+      // pusat spektrum (suara manusia biasanya 300–3400 Hz)
+      let num=0, den=0, band=0;
+      const binHz = actx.sampleRate/an.fftSize;
+      for(let i=0;i<freq.length;i++){
+        const m=freq[i]/255, f=i*binHz;
+        num+=f*m; den+=m;
+        if(f>=250 && f<=3600) band+=m;
+      }
+      const centroid = den>0 ? num/den : 0;
+      band = band/Math.max(1,(3600-250)/binHz);
+
+      // lantai bising adaptif (dikemas kini hanya semasa senyap)
+      const speech = rms > Math.max(noiseFloor*3.2, 0.006) && band > 0.045 && centroid > 180 && zcr < .35;
+      if(!speech) noiseFloor = noiseFloor*0.97 + rms*0.03;
+      else lastVoiceAt = Date.now();
+      vadOn = speech;
+
+      const snr = 20*Math.log10((rms+1e-7)/(noiseFloor+1e-7));
+      const lvl = Math.min(1, rms*9);
+      smooth = smooth*0.7 + lvl*0.3;
+
+      const col = speech ? "47,191,113" : "239,75,93";
+      $("vu").style.boxShadow = `0 0 0 ${6+smooth*28}px rgba(${col},${.06+smooth*.2})`;
+      $("mic-wrap").classList.toggle("voice", speech);
+
+      if(++qTick % 20 === 0 && listening){
+        if(peak > .97) setAQ("Audio: terlalu kuat", "warn");
+        else if(rms < 0.0035) setAQ("Audio: terlalu perlahan", "warn");
+        else if(snr < 8) setAQ("Audio: bising", "warn");
+        else setAQ("Audio: jelas", "good");
+      }
       rafId = requestAnimationFrame(tick);
     };
     tick();
@@ -1334,6 +1545,9 @@ async function startMeter(){
 function stopMeter(){
   if(rafId) cancelAnimationFrame(rafId);
   $("vu").style.boxShadow = "none";
+  vadOn = false; $("mic-wrap").classList.remove("voice");
+  const aq = $("audio-q"); if(aq) aq.hidden = true;
+  if(dspNodes){ try{ Object.values(dspNodes).forEach(n=>n.disconnect&&n.disconnect()); }catch(e){} dspNodes=null; }
   if(mediaStream){ mediaStream.getTracks().forEach(t=>t.stop()); mediaStream=null; }
 }
 
@@ -1352,7 +1566,7 @@ async function startRec(){
   listening = true;
   rec = new SR();
   rec.lang="ar-SA"; rec.continuous=true; rec.interimResults=true; rec.maxAlternatives=1;
-  const snaps = {};             // keadaan sebelum setiap segmen (interim boleh berubah-ubah)
+  let snaps = {};               // keadaan sebelum setiap segmen (interim boleh berubah-ubah)
   let gotAny = false;
   clearTimeout(watchdog);
   watchdog = setTimeout(()=>{
@@ -1360,6 +1574,7 @@ async function startRec(){
   }, 8000);
   rec.onstart=()=>{
     listening=true;
+    snaps = {};                 // PENTING: buang snapshot lama supaya kemajuan tidak berundur
     $("mic").classList.add("on"); $("mic-wrap").classList.add("on");
     $("state").textContent="Mendengar…"; $("state").classList.add("live");
     setStatus("Sedang mendengar bacaan anda…");
@@ -1377,14 +1592,16 @@ async function startRec(){
   rec.onend=()=>{ if(listening){ setTimeout(()=>{ try{ rec.start(); }catch(e){} }, 250); } else stopUI(); };
   rec.onresult=(ev)=>{
     gotAny = true;
+    if(micMuted) return;        // sedang memainkan audio contoh — abaikan gema
     for(let i=ev.resultIndex;i<ev.results.length;i++){
       const r=ev.results[i], txt=(r[0].transcript||"").trim();
       if(!txt) continue;
       // Teks interim sering DIKEMASKINI/DIBETULKAN oleh enjin, jadi setiap kali kita
       // ulang-semak keseluruhan segmen bermula daripada keadaan sebelum segmen ini.
       if(!snaps[i] || snaps[i].a !== aIdx) snaps[i] = { a:aIdx, cursor, marks: marks.slice() };
-      cursor = snaps[i].cursor; marks = snaps[i].marks.slice();
+      if(snaps[i].cursor <= cursor){ cursor = snaps[i].cursor; marks = snaps[i].marks.slice(); }
       processSpoken(txt, !!r.isFinal);
+      keepProgress();
       if(r.isFinal) snaps[i] = { a:aIdx, cursor, marks: marks.slice() };
     }
   };
@@ -1469,6 +1686,9 @@ function initSettingsUI(){
   bindToggle("tg-hidehdr","hideHdr", ()=>{ hdrShown=false; applySettings(); });
   bindToggle("tg-hafazan","hafazan");
   bindToggle("tg-strict","strict");
+  bindToggle("tg-sfx","sfx");
+  bindToggle("tg-dsp","dsp", ()=>{ if(listening){ stopMeter(); startMeter(); } });
+  bindToggle("tg-dspmobile","dspMobile", ()=>{ if(listening){ stopMeter(); startMeter(); } });
   bindRange("set-repeat","repeat","rep-val");
   bindRange("set-size","size","size-val");
   bindRange("set-tsize","tsize","tsize-val");
