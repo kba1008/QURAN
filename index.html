@@ -111,6 +111,9 @@
   .w.play{background:rgba(216,182,120,.32);box-shadow:inset 0 0 0 1px var(--gold);color:#fff5e0}
   .hint{margin-top:10px;font-size:12px;color:var(--muted)}
   @keyframes shake{25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
+  .w.again{animation:blinkok .7s ease-in-out 2}
+  @keyframes blinkok{0%,100%{background:rgba(47,191,113,.18)}50%{background:rgba(47,191,113,.55);color:#eafff2}}
+  .btn[disabled]{opacity:.4;pointer-events:none}
   .bar{height:6px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden;margin-top:6px}
   .bar > i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--green),var(--gold));transition:width .3s}
   .trans{margin-top:16px;padding-top:14px;border-top:1px dashed var(--line);font-size:15px;line-height:1.9;color:var(--text);opacity:.9}
@@ -200,6 +203,16 @@
   #trans-box h3{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
   #trans-box{margin-top:16px}
   #trans-box .trans{margin-top:0;padding-top:0;border-top:none}
+  /* Terjemahan setiap perkataan (di bawah setiap perkataan Al-Quran) */
+  .wu{display:inline-flex;flex-direction:column;align-items:center;vertical-align:top;margin:0 1px}
+  .wt{direction:ltr;font-family:'Manrope',system-ui,sans-serif;font-size:12px;line-height:1.25;
+      color:var(--muted);max-width:12ch;text-align:center;margin-top:2px;word-break:break-word}
+  /* Butang atas boleh disembunyikan dalam paparan telefon */
+  #hdr-toggle{display:none}
+  @media (max-width:640px){
+    #hdr-toggle{display:grid}
+    header.tools-off .hdr-right{display:none}
+  }
 </style>
 
 </head>
@@ -210,6 +223,7 @@
       <div class="logo">۩</div>
       <div><h1>Tasmi'</h1><p id="profile-label">Semakan bacaan Al-Quran</p></div>
     </div>
+    <button class="icon-btn" id="hdr-toggle" aria-label="Tunjuk / sembunyi butang atas" title="Tunjuk / sembunyi butang atas">☰</button>
     <div class="hdr-right">
       <span class="pill" id="state">Sedia</span>
       <button class="icon-btn" id="bm-add" aria-label="Simpan penanda">🔖</button>
@@ -272,7 +286,7 @@
     <button class="mic" id="mic" aria-label="Mula membaca">🎙</button>
   </div>
   <button class="btn" id="listen">▶ Dengar</button>
-  <button class="btn" id="skip">Langkau ›</button>
+  <button class="btn" id="skip" disabled>Langkau ›</button>
 </div></div>
 
 <!-- ============ TETAPAN ============ -->
@@ -317,6 +331,7 @@
         <div class="switch"><span>Wajib betul sebelum teruskan</span><div class="tg" id="tg-mustcorrect"></div></div>
         <div class="switch"><span>Wajib ulang perkataan salah sehingga betul (mod latih tubi)</span><div class="tg" id="tg-drill"></div></div>
         <div class="switch"><span>Mainkan bacaan betul bila salah</span><div class="tg" id="tg-autofix"></div></div>
+        <div class="switch"><span>Mod bebas: salah kekal merah, betulkan sekali sahaja &amp; teruskan bacaan</span><div class="tg" id="tg-freeflow"></div></div>
         <div class="switch"><span>Guru tegas (bip bila salah)</span><div class="tg" id="tg-strict"></div></div>
         <div class="switch"><span>Auto buka mikrofon selepas app habis bercakap</span><div class="tg" id="tg-automic"></div></div>
         <div class="fld">
@@ -329,14 +344,17 @@
     <details class="grp">
       <summary>Terjemahan</summary>
       <div class="grp-body">
-        <div class="switch"><span>Paparkan terjemahan</span><div class="tg" id="tg-showtrans"></div></div>
+        <div class="switch"><span>Terjemahan setiap perkataan (di bawah setiap perkataan)</span><div class="tg" id="tg-wbw"></div></div>
+        <div class="switch"><span>Paparkan terjemahan penuh</span><div class="tg" id="tg-showtrans"></div></div>
         <div class="fld">
-          <label>Kedudukan terjemahan</label>
+          <label>Kedudukan terjemahan penuh</label>
           <select id="set-transpos">
             <option value="ayat">Di bawah setiap ayat Al-Quran</option>
             <option value="bawah">Di bahagian bawah sekali</option>
           </select>
         </div>
+        <div class="switch"><span>Sembunyikan butang atas (paparan telefon)</span><div class="tg" id="tg-hidehdr"></div></div>
+
         <div class="switch"><span>Auto baca terjemahan (selepas semua bacaan betul)</span><div class="tg" id="tg-speaktrans"></div></div>
         <div class="fld">
           <label>Saiz teks terjemahan: <b id="tsize-val">15</b> px</label>
@@ -583,7 +601,7 @@ const DEFAULTS = {
   repeat:3, size:32, tsize:15, rate:1, tol:72, voice:"",
   qari:"ar.alafasy", arate:1, autoFix:true, autoPlay:false,
   theme:"emerald", tajwid:true, autoMic:true, mustCorrect:true, transDelay:1000, keepAwake:true,
-  drill:true, transPos:"ayat"
+  drill:true, transPos:"ayat", freeFlow:false, wbw:false, hideHdr:true
 
 };
 let profile = LS.get("tasmi.profile","Pengguna");
@@ -827,6 +845,7 @@ let current = null;       // {n,name,ayat:[],ms:[]}
 let aIdx=0, cursor=0, marks=[], listening=false, repDone=0, busy=false;
 let watchdog=null;
 let drillWord=-1, drillAt=0;
+let badTries=0, fixedOnce={};
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 function setStatus(t){ $("status").textContent = t; }
@@ -850,30 +869,98 @@ function applySettings(){
   $("trans-box").hidden = !(bottom && S.showTrans);
   $("profile-label").textContent = profile + " · semakan bacaan";
   $("rep-badge").hidden = !S.hafazan;
+  // Butang atas: sembunyi dalam paparan telefon, tekan ☰ untuk kembalikan
+  document.querySelector("header").classList.toggle("tools-off", !!S.hideHdr && !hdrShown);
 }
 
 
 function fillSurahSelect(){
+  // Kekalkan pilihan semasa supaya senarai yang dimuat semula tidak melompat ke Al-Faatihah
+  const keep = (current && current.n) || +$("surah").value || 0;
   $("surah").innerHTML = surahList.map(s=>`<option value="${s.n}">${s.n}. ${s.name}</option>`).join("");
+  if(keep) $("surah").value = keep;
 }
 function fillAyahSelect(){
   $("ayah").innerHTML = current.ayat.map((_,i)=>`<option value="${i}">Ayat ${i+1}</option>`).join("");
   $("ayah").value = aIdx;
 }
 
+let flashWord=-1;
+/* Butang Langkau hanya boleh ditekan selepas sekurang-kurangnya 2 kali ulang baca */
+function updateSkipBtn(){
+  const btn = $("skip"); if(!btn) return;
+  const hasBad = marks.some(m=>m==="bad");
+  const allow = S.freeFlow ? true : (hasBad && badTries >= 2);
+  btn.disabled = !allow;
+  btn.title = allow ? "Langkau perkataan ini" : "Ulang baca sekurang-kurangnya 2 kali sebelum boleh langkau";
+}
+/* Auto skrol supaya perkataan semasa sentiasa kelihatan (terutama di telefon) */
+function scrollToCursor(){
+  const host = $("ayah-text"); if(!host) return;
+  const el = host.querySelector(".w.cur") || host.querySelector(`.w[data-i="${Math.max(0,cursor)}"]`);
+  if(!el) return;
+  const r = el.getBoundingClientRect();
+  const pad = 120;
+  if(r.top < pad || r.bottom > window.innerHeight - pad){
+    try{ el.scrollIntoView({ behavior:"smooth", block:"center" }); }
+    catch(e){ window.scrollTo(0, window.scrollY + r.top - window.innerHeight/2); }
+  }
+}
+/* ===== Terjemahan setiap perkataan (word-by-word) ===== */
+let hdrShown = false;
+const WBW = {};                       // "surah:ayat" -> [gloss,...]
+function wbwKey(){ return current.n+":"+(aIdx+1); }
+function wbwGet(){
+  if(!S.wbw) return null;
+  const g = WBW[wbwKey()];
+  if(!g) return null;
+  const n = currentAyah().split(/\s+/).filter(Boolean).length;
+  // ayat pertama mungkin ada Bismillah di depan — padankan dari belakang
+  if(g.length < n) return new Array(n-g.length).fill("").concat(g);
+  return g.slice(g.length-n);
+}
+async function wbwFetch(){
+  if(!S.wbw || !current) return;
+  const k = wbwKey(); if(WBW[k]) return;
+  try{
+    const r = await fetch(`https://api.qurancdn.com/api/qdc/verses/by_key/${k}?words=true&word_translation_language=id`);
+    const j = await r.json();
+    const ws = (j.verse && j.verse.words || []).filter(w=>w.char_type_name==="word");
+    WBW[k] = ws.map(w=>(w.translation && w.translation.text) || "");
+    try{ LS.set("tasmi.wbw."+k, WBW[k]); }catch(e){}
+    render();
+  }catch(e){
+    const c = LS.get("tasmi.wbw."+k, null);
+    if(c){ WBW[k] = c; render(); }
+  }
+}
 function render(){
   const w = currentAyah().split(/\s+/).filter(Boolean);
   $("tj-key").hidden = !S.tajwid;
+  const gloss = wbwGet();
   $("ayah-text").innerHTML = w.map((t,i)=>{
     const cls = marks[i]==="ok"?"ok":marks[i]==="bad"?"bad":(i===cursor?"cur":"");
     const inner = (S.tajwid && !marks[i]) ? tajwidHTML(t, w[i+1]) : escHtml(t);
-    return `<span class="w ${cls}" data-i="${i}" role="button" tabindex="0" title="Tekan untuk dengar bacaan betul">${inner}</span>`;
+    const word = `<span class="w ${cls}" data-i="${i}" role="button" tabindex="0" title="Tekan untuk dengar bacaan betul">${inner}</span>`;
+    if(!gloss) return word;
+    return `<span class="wu">${word}<span class="wt">${escHtml(gloss[i]||"")}</span></span>`;
   }).join(" ");
+
   const done = marks.filter(m=>m==="ok").length;
   const pct = w.length? Math.round(done/w.length*100):0;
   $("score").textContent = pct+"%";
   $("prog").style.width = pct+"%";
   $("label").textContent = `${current.name} · Ayat ${aIdx+1} / ${current.ayat.length}`;
+  // Pastikan kotak pilihan sentiasa menunjukkan surah & ayat yang sedang dibaca
+  if(+$("surah").value !== current.n) $("surah").value = current.n;
+  if(+$("ayah").value !== aIdx) $("ayah").value = aIdx;
+  updateSkipBtn();
+  if(flashWord >= 0){
+    const el = $("ayah-text").querySelector(`.w[data-i="${flashWord}"]`);
+    if(el){ el.classList.add("again"); }
+    flashWord = -1;
+  }
+  scrollToCursor();
   if(S.hafazan){ $("rep-badge").hidden=false; $("rep-badge").textContent = `Hafazan: ulangan ${repDone}/${S.repeat}`; }
   else $("rep-badge").hidden = true;
   renderTrans();
@@ -888,15 +975,16 @@ function loadAyah(i,resetRep=true){
   if(!current) return;
   stopAudio();
   aIdx = Math.max(0, Math.min(+i || 0, current.ayat.length-1));
-  cursor=0; if(resetRep) repDone=0; drillWord=-1; drillAt=0;
+  cursor=0; if(resetRep) repDone=0; drillWord=-1; drillAt=0; badTries=0; fixedOnce={};
   marks = new Array(currentAyah().split(/\s+/).filter(Boolean).length).fill(null);
   $("ayah").value = aIdx;
   $("surah").value = current.n;
   render();
+  wbwFetch();
   saveResume();
   if(S.autoPlay) setTimeout(()=>playAyah(aIdx), 250);
 }
-function resetAyah(){ cursor=0; marks=marks.map(()=>null); drillWord=-1; drillAt=0; render(); }
+function resetAyah(){ cursor=0; marks=marks.map(()=>null); drillWord=-1; drillAt=0; badTries=0; fixedOnce={}; render(); }
 
 function nextAyah(){
   if(aIdx+1 < current.ayat.length) loadAyah(aIdx+1);
@@ -915,6 +1003,7 @@ async function loadSurahList(){
     }
   }catch(e){ /* guna cache/fallback */ }
   fillSurahSelect();
+  if(current) $("surah").value = current.n;
 }
 
 let loadSeq = 0;
@@ -1040,7 +1129,8 @@ function ayahComplete(){
     speakSoon(()=>setTimeout(()=>{ nextAyah(); resumeMicAuto(300); }, 700));
     return;
   }
-  setStatus("Ayat betul 100%.");
+  if(S.freeFlow && marks.some(m=>m==="bad")) setStatus("Ayat selesai. Meneruskan ke ayat seterusnya…");
+  else setStatus("Ayat betul 100%.");
   speakSoon(()=>setTimeout(()=>{ nextAyah(); resumeMicAuto(300); }, 700));
 }
 
@@ -1058,52 +1148,82 @@ function processSpoken(text, isFinal){
     const judge = isFinal || si < sw.length-1;   // perkataan terakhir interim belum stabil
     if(cursor >= target.length) break;
 
+    /* --- ULANG BACA: perkataan yang SUDAH hijau --- */
+    // Pengguna boleh mula semula dari mana-mana; perkataan hijau hanya berkelip,
+    // kursor TIDAK diundurkan dan tiada markah salah diberi.
+    let already = -1;
+    for(let j2=0;j2<cursor;j2++){
+      if(marks[j2]==="ok" && similar(spoken, target[j2]) >= TOL()){ already = j2; break; }
+    }
+
     // MOD LATIH TUBI: perkataan sedang dibetulkan — wajib baca semula perkataan itu sahaja
-    if(S.drill && marks[cursor]==="bad"){
+    if(!S.freeFlow && S.drill && marks[cursor]==="bad"){
       if(similar(spoken, target[cursor]) >= TOL()){
-        marks[cursor]="ok"; cursor++; drillWord=-1;
+        marks[cursor]="ok"; cursor++; drillWord=-1; badTries=0;
         if(S.strict) beep("ok");
         setStatus("Bagus! Perkataan itu sudah betul. Teruskan bacaan.");
         continue;
       }
+      if(already >= 0){ flashWord = already; continue; }   // sedang mengulang bahagian hijau
       if(!judge) continue;
       const bad = cursor;
+      badTries++;
       render();
       const now = Date.now();
       if(S.autoFix && now - drillAt > 2200){
         drillAt = now; drillWord = bad;
-        setStatus("Belum tepat lagi. Dengar bacaan yang betul, kemudian ulang perkataan merah itu.");
+        setStatus(badTries>=2
+          ? "Belum tepat lagi. Anda boleh tekan butang Langkau, atau ulang perkataan merah itu."
+          : "Belum tepat lagi. Dengar bacaan yang betul, kemudian ulang perkataan merah itu.");
         setTimeout(()=>playWord(bad), 300);
         return;
       }
-      setStatus("Belum tepat lagi. Sila ulang perkataan merah itu sehingga betul.");
+      setStatus(badTries>=2
+        ? "Masih belum tepat. Ulang lagi atau tekan butang Langkau."
+        : "Belum tepat lagi. Sila ulang perkataan merah itu sehingga betul.");
       continue;                            // jangan maju selagi belum betul
     }
 
     if(similar(spoken, target[cursor]) >= TOL()){
-      marks[cursor]="ok"; cursor++; continue;
+      marks[cursor]="ok"; cursor++; badTries=0; continue;
     }
     // cuba padan dengan 1–2 perkataan berikutnya (kadang pengecaman gabung/lompat)
     let jumped = false;
     for(let k=1;k<=2 && cursor+k<target.length;k++){
       if(similar(spoken, target[cursor+k]) >= TOL()){
-        for(let j=0;j<k;j++){ if(marks[cursor+j]!=="ok") marks[cursor+j]="ok"; }
-        marks[cursor+k]="ok"; cursor+=k+1; jumped=true; break;
+        for(let j3=0;j3<k;j3++){ if(marks[cursor+j3]!=="ok") marks[cursor+j3]="ok"; }
+        marks[cursor+k]="ok"; cursor+=k+1; badTries=0; jumped=true; break;
       }
     }
     if(jumped) continue;
     // gabungan dua perkataan target (cth. dibaca bersambung)
     if(cursor+1 < target.length && similar(spoken, target[cursor]+target[cursor+1]) >= TOL()){
-      marks[cursor]="ok"; marks[cursor+1]="ok"; cursor+=2; continue;
+      marks[cursor]="ok"; marks[cursor+1]="ok"; cursor+=2; badTries=0; continue;
     }
-    // ULANG BACA: pengguna mengulang ayat/perkataan yang sudah betul — jangan kira salah,
-    // cuma selaraskan semula kedudukan kursor.
-    let back = -1;
-    for(let j=0;j<cursor;j++){ if(similar(spoken, target[j]) >= TOL()){ back = j; break; } }
-    if(back >= 0){ marks[back]="ok"; cursor = back+1; continue; }
+    // Perkataan hijau diulang baca — biar berkelip hijau sahaja, kursor kekal di tempatnya
+    if(already >= 0){ flashWord = already; continue; }
     if(!judge) continue;                 // jangan hukum perkataan yang masih dituturkan
+
+    /* --- MOD BEBAS: salah kekal merah, dibetulkan sekali sahaja, bacaan diteruskan --- */
+    if(S.freeFlow){
+      const bad = cursor;
+      marks[bad]="bad";
+      cursor++;
+      const first = !fixedOnce[bad];
+      if(first){
+        fixedOnce[bad]=true;
+        if(S.strict) beep("err");
+        setStatus("Perkataan itu belum tepat — dengar bacaan yang betul, kemudian teruskan bacaan.");
+        if(S.autoFix){ drillWord=bad; drillAt=Date.now(); render(); setTimeout(()=>playWord(bad), 300); }
+      } else {
+        setStatus("Teruskan bacaan.");
+      }
+      continue;
+    }
+
     if(marks[cursor] !== "bad"){
       marks[cursor]="bad";
+      badTries = 0;
       if(S.strict){ beep("err"); }
       setStatus((S.drill || S.mustCorrect)
         ? "Bacaan belum tepat. Sila ulang perkataan merah ini sehingga betul sebelum diteruskan."
@@ -1114,7 +1234,9 @@ function processSpoken(text, isFinal){
   }
 
   render();
-  if(cursor >= target.length && marks.length && marks.every(m=>m==="ok")) ayahComplete();
+  const finished = cursor >= target.length && marks.length &&
+    (S.freeFlow ? marks.every(m=>m) : marks.every(m=>m==="ok"));
+  if(finished) ayahComplete();
 }
 
 async function startMeter(){
@@ -1209,12 +1331,17 @@ $("mic").onclick = ()=>{
   if(listening){ micAuto=false; stopRec(); } else { micAuto=false; startRec(); }
 };
 $("skip").onclick = ()=>{
-  if((S.mustCorrect || S.drill) && marks.some(m=>m==="bad")){
-    setStatus("Tetapan 'Wajib betul sebelum teruskan' aktif — sila betulkan perkataan merah dahulu.");
-    beep("err"); return;
-  }
   const t = currentAyah().split(/\s+/).filter(Boolean);
-  if(cursor < t.length){ marks[cursor]="bad"; cursor++; render(); setStatus("Perkataan dilangkau."); }
+  const hasBad = marks.some(m=>m==="bad");
+  if(!S.freeFlow && (!hasBad || badTries < 2)){
+    setStatus("Sila ulang baca perkataan merah sekurang-kurangnya 2 kali sebelum melangkau.");
+    beep("err"); updateSkipBtn(); return;
+  }
+  if(cursor < t.length){
+    marks[cursor]="bad"; fixedOnce[cursor]=true; cursor++; badTries=0; drillWord=-1;
+    render(); setStatus("Perkataan dilangkau. Teruskan bacaan.");
+    if(cursor >= t.length && marks.every(m=>m)) ayahComplete();
+  }
   else nextAyah();
 };
 $("prev").onclick = ()=>{ if(aIdx>0) loadAyah(aIdx-1); };
@@ -1263,6 +1390,8 @@ function initSettingsUI(){
   bindToggle("tg-showtext","showText");
   bindToggle("tg-showtrans","showTrans");
   bindToggle("tg-speaktrans","speakTrans");
+  bindToggle("tg-wbw","wbw", ()=>{ if(S.wbw) wbwFetch(); if(current) render(); });
+  bindToggle("tg-hidehdr","hideHdr", ()=>{ hdrShown=false; applySettings(); });
   bindToggle("tg-hafazan","hafazan");
   bindToggle("tg-strict","strict");
   bindRange("set-repeat","repeat","rep-val");
@@ -1276,10 +1405,13 @@ function initSettingsUI(){
   $("set-qari").onchange = e => { S.qari = e.target.value; saveSettings(); stopAudio(); };
   bindRange("set-arate","arate","arate-val",v=>v.toFixed(1));
   bindToggle("tg-autofix","autoFix");
+  bindToggle("tg-freeflow","freeFlow", ()=>{ updateSkipBtn(); });
   bindToggle("tg-autoplay","autoPlay");
   applySettings();
 }
 $("open-set").onclick = ()=> $("sheet").classList.add("open");
+/* ☰ — tunjuk/sembunyi butang atas dalam paparan telefon */
+$("hdr-toggle").onclick = ()=>{ hdrShown = !hdrShown; applySettings(); };
 $("close-set").onclick = ()=> { saveSettings(); $("sheet").classList.remove("open"); };
 $("sheet").onclick = e => { if(e.target.id==="sheet"){ saveSettings(); $("sheet").classList.remove("open"); } };
 $("switch-profile").onclick = ()=>{
