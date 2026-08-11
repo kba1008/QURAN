@@ -208,32 +208,18 @@
   .wt{direction:ltr;font-family:'Manrope',system-ui,sans-serif;font-size:12px;line-height:1.25;
       color:var(--muted);max-width:12ch;text-align:center;margin-top:2px;word-break:break-word}
   /* Butang atas boleh disembunyikan dalam paparan telefon */
-  #hdr-toggle{display:none;flex:none}
-  header{flex-wrap:wrap}
-  .brand{min-width:0;flex:1 1 auto}
-  .brand h1,.brand p{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .hdr-right{flex-wrap:wrap;justify-content:flex-end;min-width:0;max-width:100%}
+  #hdr-toggle{display:none}
+  .hdr-right{flex-wrap:wrap;justify-content:flex-end}
   @media (max-width:640px){
-    #hdr-toggle{display:grid}
+    #hdr-toggle{display:grid;flex:none}
+    header{flex-wrap:wrap;row-gap:10px}
+    .brand{min-width:0;flex:1}
+    .brand h1,.brand p{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     header.tools-off .hdr-right{display:none}
-    .wrap{padding-left:14px;padding-right:14px}
-    .brand{gap:9px}
-    .logo{width:36px;height:36px;border-radius:12px;font-size:17px}
-    .brand h1{font-size:15px}
-    .brand p{font-size:11px}
-    /* semua butang atas mesti kekal dalam skrin telefon */
-    .hdr-right{flex:1 1 100%;gap:6px;margin-top:2px}
-    .hdr-right .icon-btn{width:34px;height:34px;font-size:15px;border-radius:11px}
-    .hdr-right .pill{font-size:10px;padding:6px 9px;margin-inline-end:auto}
+    /* Bila semua butang dipaparkan, ia turun ke baris sendiri & tidak terkeluar skrin */
+    .hdr-right{flex:1 0 100%;justify-content:flex-start;gap:8px;flex-wrap:wrap}
+    .hdr-right .icon-btn{width:42px;height:42px}
   }
-  @media (max-width:360px){
-    .hdr-right .icon-btn{width:31px;height:31px;font-size:14px}
-  }
-  .wt{min-height:1.25em}
-  .wt.load{opacity:.45;font-style:italic}
-  /* perkataan yang terlangkau / belum dibaca */
-  .w.miss{background:rgba(239,75,93,.12);color:#ff9aa5;
-    box-shadow:inset 0 0 0 1px rgba(239,75,93,.3)}
 </style>
 
 </head>
@@ -352,17 +338,7 @@
         <div class="switch"><span>Wajib betul sebelum teruskan</span><div class="tg" id="tg-mustcorrect"></div></div>
         <div class="switch"><span>Wajib ulang perkataan salah sehingga betul (mod latih tubi)</span><div class="tg" id="tg-drill"></div></div>
         <div class="switch"><span>Mainkan bacaan betul bila salah</span><div class="tg" id="tg-autofix"></div></div>
-        <div class="switch"><span><b>Mod bacaan pantas</b> — salah terus merah, betulkan sekali sahaja &amp; bacaan diteruskan</span><div class="tg" id="tg-fast"></div></div>
-        <div class="fld">
-          <label>Bila salah dalam mod bacaan pantas</label>
-          <select id="set-fixmode">
-            <option value="beep">Bunyi bip sahaja</option>
-            <option value="speak">App bacakan perkataan betul sekali sahaja</option>
-            <option value="silent">Senyap (merah sahaja)</option>
-          </select>
-        </div>
-        <div class="switch"><span>Ingat perkataan yang sudah hijau (memori kuat)</span><div class="tg" id="tg-remember"></div></div>
-        <div class="switch"><span>Mod bebas (sama seperti mod pantas)</span><div class="tg" id="tg-freeflow"></div></div>
+        <div class="switch"><span>Mod bebas: salah kekal merah, betulkan sekali sahaja &amp; teruskan bacaan</span><div class="tg" id="tg-freeflow"></div></div>
         <div class="switch"><span>Guru tegas (bip bila salah)</span><div class="tg" id="tg-strict"></div></div>
         <div class="switch"><span>Auto buka mikrofon selepas app habis bercakap</span><div class="tg" id="tg-automic"></div></div>
         <div class="fld">
@@ -386,7 +362,6 @@
         </div>
         <div class="switch"><span>Sembunyikan butang atas (paparan telefon)</span><div class="tg" id="tg-hidehdr"></div></div>
 
-        <div class="switch"><span>Auto skrol terjemahan supaya tidak terlindung</span><div class="tg" id="tg-scrolltrans"></div></div>
         <div class="switch"><span>Auto baca terjemahan (selepas semua bacaan betul)</span><div class="tg" id="tg-speaktrans"></div></div>
         <div class="fld">
           <label>Saiz teks terjemahan: <b id="tsize-val">15</b> px</label>
@@ -411,21 +386,6 @@
           <label>Bilangan ulangan setiap ayat: <b id="rep-val">3</b></label>
           <input type="range" id="set-repeat" min="1" max="10" step="1" />
         </div>
-        <div class="switch"><span>Dengar bacaan qari dahulu sebelum menghafaz ayat</span><div class="tg" id="tg-haflisten"></div></div>
-        <div class="switch"><span>Mainkan qari sebelum setiap ulangan</span><div class="tg" id="tg-hafaudio"></div></div>
-        <div class="fld">
-          <label>Sembunyikan teks ayat semasa hafazan</label>
-          <select id="set-hafhide">
-            <option value="none">Jangan sembunyi (teks sentiasa nampak)</option>
-            <option value="after1">Sembunyi selepas ulangan pertama (disyorkan)</option>
-            <option value="always">Sentiasa sembunyi (ujian hafazan)</option>
-          </select>
-        </div>
-        <div class="fld">
-          <label>Kumpulan hafazan (ayat sekumpulan): <b id="hafchunk-val">3</b></label>
-          <input type="range" id="set-hafchunk" min="1" max="10" step="1" />
-        </div>
-        <div class="switch"><span>Ulang gabungan kumpulan ayat (muraja'ah) selepas setiap kumpulan</span><div class="tg" id="tg-hafreview"></div></div>
       </div>
     </details>
 
@@ -648,18 +608,8 @@ const DEFAULTS = {
   repeat:3, size:32, tsize:15, rate:1, tol:72, voice:"",
   qari:"ar.alafasy", arate:1, autoFix:true, autoPlay:false,
   theme:"emerald", tajwid:true, autoMic:true, mustCorrect:true, transDelay:1000, keepAwake:true,
-  drill:true, transPos:"ayat", freeFlow:false, wbw:false, hideHdr:true,
-  /* ===== MOD BACAAN PANTAS (default untuk pengguna baharu) ===== */
-  fastMode:true,            // salah terus merah, betulkan sekali, bacaan diteruskan
-  fixMode:"beep",           // "beep" | "speak" (bacakan betul sekali) | "silent"
-  autoScrollTrans:true,     // auto skrol supaya terjemahan penuh tidak terlindung
-  rememberProgress:true,    // ingat perkataan hijau (memori kuat)
-  /* ===== HAFAZAN ===== */
-  hafListenFirst:true,      // dengar bacaan qari dahulu sebelum mengulang
-  hafHide:"after1",         // "none" | "after1" (sembunyi selepas ulangan pertama) | "always"
-  hafChunk:3,               // bilangan ayat setiap kumpulan hafazan
-  hafReview:true,           // ulang gabungan kumpulan ayat selepas setiap kumpulan
-  hafAudioRepeat:false      // mainkan qari sebelum SETIAP ulangan
+  drill:true, transPos:"ayat", freeFlow:false, wbw:false, hideHdr:true
+
 };
 let profile = LS.get("tasmi.profile","Pengguna");
 let S = { ...DEFAULTS };
@@ -903,37 +853,6 @@ let aIdx=0, cursor=0, marks=[], listening=false, repDone=0, busy=false;
 let watchdog=null;
 let drillWord=-1, drillAt=0;
 let badTries=0, fixedOnce={};
-let hafRepeatPass=0, hafReviewMode=false, hafReviewEnd=-1, hafChunkStart=0;
-/* Mod bacaan pantas / bebas — salah kekal merah tetapi bacaan boleh diteruskan */
-function FAST(){ return !!(S.fastMode || S.freeFlow); }
-
-/* ===== MEMORI KUAT: perkataan yang sudah hijau diingat ===== */
-function progKey(){ return "tasmi.prog."+profile.toLowerCase().trim(); }
-function progAll(){ return LS.get(progKey(), {}); }
-function saveProgress(){
-  if(!S.rememberProgress || !current) return;
-  const all = progAll();
-  const k = current.n+":"+aIdx;
-  if(marks.some(m=>m)) all[k] = { m: marks.map(x=>x==="ok"?1:(x==="bad"?2:0)), c: cursor, t: Date.now() };
-  else delete all[k];
-  const keys = Object.keys(all);
-  if(keys.length > 800){ keys.sort((a,b)=>(all[a].t||0)-(all[b].t||0)).slice(0, keys.length-800).forEach(x=>delete all[x]); }
-  LS.set(progKey(), all);
-}
-function restoreProgress(){
-  if(!S.rememberProgress || !current) return false;
-  const rec2 = progAll()[current.n+":"+aIdx];
-  if(!rec2 || !Array.isArray(rec2.m)) return false;
-  const n = currentAyah().split(/\s+/).filter(Boolean).length;
-  if(rec2.m.length !== n) return false;
-  marks = rec2.m.map(v=>v===1?"ok":(v===2?"bad":null));
-  cursor = Math.max(0, Math.min(+rec2.c||0, n));
-  return true;
-}
-function clearProgress(){
-  if(!current) return;
-  const all = progAll(); delete all[current.n+":"+aIdx]; LS.set(progKey(), all);
-}
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 function setStatus(t){ $("status").textContent = t; }
@@ -945,7 +864,7 @@ function applySettings(){
   const meta = document.querySelector('meta[name="theme-color"]'); if(meta) meta.setAttribute("content", tc);
   document.documentElement.style.setProperty("--ayah-size", S.size+"px");
   $("trans").style.fontSize = S.tsize+"px";
-  $("ayah-text").classList.toggle("hidden-text", !S.showText || (typeof hafHideNow==="function" && hafHideNow()));
+  $("ayah-text").classList.toggle("hidden-text", !S.showText);
   $("trans").hidden = !S.showTrans;
   // Kedudukan terjemahan: bawah setiap ayat, atau di bahagian bawah sekali
   const bottom = (S.transPos === "bawah");
@@ -978,10 +897,9 @@ let flashWord=-1;
 function updateSkipBtn(){
   const btn = $("skip"); if(!btn) return;
   const hasBad = marks.some(m=>m==="bad");
-  const allow = FAST() ? true : (hasBad && badTries >= 2);
+  const allow = S.freeFlow ? true : (hasBad && badTries >= 2);
   btn.disabled = !allow;
-  btn.textContent = allow && badTries >= 2 ? "Langkau ›" : "Langkau ›";
-  btn.title = allow ? "Langkau perkataan ini" : "Ulang baca perkataan merah 2 kali sebelum boleh langkau";
+  btn.title = allow ? "Langkau perkataan ini" : "Ulang baca sekurang-kurangnya 2 kali sebelum boleh langkau";
 }
 /* Auto skrol supaya perkataan semasa sentiasa kelihatan (terutama di telefon) */
 function scrollToCursor(){
@@ -995,85 +913,57 @@ function scrollToCursor(){
     catch(e){ window.scrollTo(0, window.scrollY + r.top - window.innerHeight/2); }
   }
 }
-/* Auto skrol supaya terjemahan penuh tidak terlindung di bawah skrin */
-function scrollTransIntoView(force){
-  if(!S.autoScrollTrans || !S.showTrans) return;
-  const el = $("trans"); if(!el || el.hidden) return;
-  const r = el.getBoundingClientRect();
-  if(r.height === 0) return;
-  const dockH = 150;
-  const hidden = r.bottom > (window.innerHeight - dockH) || r.top < 60;
-  if(!hidden && !force) return;
-  try{ el.scrollIntoView({ behavior:"smooth", block:"center" }); }
-  catch(e){ window.scrollTo(0, window.scrollY + r.top - window.innerHeight/2); }
-}
-
 /* ===== Terjemahan setiap perkataan (word-by-word) ===== */
 let hdrShown = false;
 const WBW = {};                       // "surah:ayat" -> [gloss,...]
 function wbwKey(){ return current.n+":"+(aIdx+1); }
 function wbwGet(){
   if(!S.wbw) return null;
-  let g = WBW[wbwKey()];
-  if(!g){
-    const c = LS.get("tasmi.wbw."+wbwKey(), null);
-    if(c && c.length){ WBW[wbwKey()] = c; g = c; }
-  }
+  const g = WBW[wbwKey()];
   if(!g) return null;
   const n = currentAyah().split(/\s+/).filter(Boolean).length;
   // ayat pertama mungkin ada Bismillah di depan — padankan dari belakang
   if(g.length < n) return new Array(n-g.length).fill("").concat(g);
   return g.slice(g.length-n);
 }
-let wbwBusy = {};
 async function wbwFetch(){
   if(!S.wbw || !current) return;
-  const k = wbwKey();
-  if(WBW[k] && WBW[k].length) return;
+  const k = wbwKey(); if(WBW[k]) return;
+  // 1) Guna cache tempatan dahulu (boleh guna luar talian)
   const cached = LS.get("tasmi.wbw."+k, null);
   if(cached && cached.length){ WBW[k] = cached; render(); return; }
-  if(wbwBusy[k]) return;
-  wbwBusy[k] = true;
-  const sources = [
-    { url:`https://api.qurancdn.com/api/qdc/verses/by_key/${k}?words=true&word_translation_language=id`,
-      pick:j=>((j.verse&&j.verse.words)||[]) },
-    { url:`https://api.quran.com/api/v4/verses/by_key/${k}?words=true&language=id&word_translation_language=id`,
-      pick:j=>((j.verse&&j.verse.words)||[]) },
-    { url:`https://api.quran.com/api/v4/verses/by_key/${k}?words=true&word_translation_language=en`,
-      pick:j=>((j.verse&&j.verse.words)||[]) }
+  // 2) Muat turun daripada API (parameter yang betul ialah language=id)
+  const urls = [
+    `https://api.quran.com/api/v4/verses/by_key/${k}?words=true&language=id&word_fields=text_uthmani`,
+    `https://api.qurancdn.com/api/qdc/verses/by_key/${k}?words=true&language=id`
   ];
-  for(const src of sources){
+  for(const u of urls){
     try{
-      const r = await fetch(src.url, { cache:"force-cache" });
+      const r = await fetch(u);
       if(!r.ok) continue;
       const j = await r.json();
-      const ws = src.pick(j).filter(w=>!w.char_type_name || w.char_type_name==="word");
-      const gl = ws.map(w=>(w.translation && w.translation.text) || w.translation || "");
-      if(!gl.length || !gl.some(x=>x)) continue;
-      WBW[k] = gl;
-      try{ LS.set("tasmi.wbw."+k, gl); }catch(e){}
-      break;
-    }catch(e){ /* cuba sumber seterusnya */ }
+      const ws = ((j.verse && j.verse.words) || []).filter(w=>w.char_type_name==="word");
+      const g = ws.map(w=>(w.translation && w.translation.text) || "");
+      if(!g.length || !g.some(Boolean)) continue;
+      WBW[k] = g;
+      try{ LS.set("tasmi.wbw."+k, g); }catch(e){}
+      render();
+      return;
+    }catch(e){ /* cuba URL seterusnya */ }
   }
-  wbwBusy[k] = false;
-  if(!WBW[k]) setStatus("Terjemahan setiap perkataan perlukan talian internet buat kali pertama.");
-  render();
+  setStatus("Terjemahan setiap perkataan perlukan talian internet buat kali pertama ayat ini.");
 }
 function render(){
   const w = currentAyah().split(/\s+/).filter(Boolean);
   $("tj-key").hidden = !S.tajwid;
   const gloss = wbwGet();
-  const wbwWait = S.wbw && !gloss;
   $("ayah-text").innerHTML = w.map((t,i)=>{
     const cls = marks[i]==="ok"?"ok":marks[i]==="bad"?"bad":(i===cursor?"cur":"");
     const inner = (S.tajwid && !marks[i]) ? tajwidHTML(t, w[i+1]) : escHtml(t);
     const word = `<span class="w ${cls}" data-i="${i}" role="button" tabindex="0" title="Tekan untuk dengar bacaan betul">${inner}</span>`;
-    if(!S.wbw) return word;
-    if(wbwWait) return `<span class="wu">${word}<span class="wt load">…</span></span>`;
+    if(!gloss) return word;
     return `<span class="wu">${word}<span class="wt">${escHtml(gloss[i]||"")}</span></span>`;
   }).join(" ");
-  // Mod hafazan: sembunyikan teks mengikut tetapan
-  $("ayah-text").classList.toggle("hidden-text", !S.showText || hafHideNow());
 
   const done = marks.filter(m=>m==="ok").length;
   const pct = w.length? Math.round(done/w.length*100):0;
@@ -1090,28 +980,26 @@ function render(){
     flashWord = -1;
   }
   scrollToCursor();
-  if(S.hafazan){
-    $("rep-badge").hidden=false;
-    $("rep-badge").textContent = hafReviewMode
-      ? `Hafazan: ulangan gabungan ayat ${hafChunkStart+1}–${hafReviewEnd+1}`
-      : `Hafazan: ulangan ${Math.min(repDone+1,S.repeat)}/${S.repeat}`;
-  }
+  if(S.hafazan){ $("rep-badge").hidden=false; $("rep-badge").textContent = `Hafazan: ulangan ${repDone}/${S.repeat}`; }
   else $("rep-badge").hidden = true;
   renderTrans();
-  saveProgress();
-}
-/* Peraturan sembunyi teks dalam mod hafazan */
-function hafHideNow(){
-  if(!S.hafazan) return false;
-  if(S.hafHide === "always") return true;
-  if(S.hafHide === "after1") return repDone >= 1 || hafReviewMode;
-  return false;
 }
 function renderTrans(hi=-1){
   const t = (current.ms && current.ms[aIdx]) || "";
   $("trans").innerHTML = t.split(/\s+/).filter(Boolean)
     .map((w,i)=>`<span class="tw${i===hi?" on":""}">${w}</span>`).join(" ");
-  if(hi >= 0) scrollTransIntoView();
+  if(hi >= 0) scrollTransIntoView(true);
+}
+/* Auto skrol ke atas supaya terjemahan penuh tidak terlindung di bawah skrin */
+function scrollTransIntoView(follow){
+  const box = $("trans"); if(!box || box.hidden) return;
+  const el = follow ? (box.querySelector(".tw.on") || box) : box;
+  const r = el.getBoundingClientRect();
+  const dockH = 150;                       // ruang butang bawah
+  if(r.bottom > window.innerHeight - dockH || r.top < 60){
+    try{ el.scrollIntoView({ behavior:"smooth", block:"center" }); }
+    catch(e){ window.scrollTo(0, window.scrollY + r.top - window.innerHeight/2); }
+  }
 }
 
 function loadAyah(i,resetRep=true){
@@ -1120,19 +1008,14 @@ function loadAyah(i,resetRep=true){
   aIdx = Math.max(0, Math.min(+i || 0, current.ayat.length-1));
   cursor=0; if(resetRep) repDone=0; drillWord=-1; drillAt=0; badTries=0; fixedOnce={};
   marks = new Array(currentAyah().split(/\s+/).filter(Boolean).length).fill(null);
-  // MEMORI KUAT — perkataan yang sudah hijau sebelum ini dikekalkan
-  if(!S.hafazan) restoreProgress();
   $("ayah").value = aIdx;
   $("surah").value = current.n;
   render();
   wbwFetch();
   saveResume();
-  if(S.hafazan && S.hafListenFirst){
-    setTimeout(()=>playAyah(aIdx, { onend: ()=> setStatus("Sekarang cuba baca ayat ini daripada hafalan.") }), 300);
-  }
-  else if(S.autoPlay) setTimeout(()=>playAyah(aIdx), 250);
+  if(S.autoPlay) setTimeout(()=>playAyah(aIdx), 250);
 }
-function resetAyah(){ cursor=0; marks=marks.map(()=>null); drillWord=-1; drillAt=0; badTries=0; fixedOnce={}; clearProgress(); render(); }
+function resetAyah(){ cursor=0; marks=marks.map(()=>null); drillWord=-1; drillAt=0; badTries=0; fixedOnce={}; render(); }
 
 function nextAyah(){
   if(aIdx+1 < current.ayat.length) loadAyah(aIdx+1);
@@ -1226,6 +1109,7 @@ function speakTranslation(done){
   const text = (current.ms && current.ms[aIdx]) || "";
   if(!S.speakTrans || !text || !window.speechSynthesis){ done && done(); return; }
   pauseMicAuto();
+  setTimeout(()=>scrollTransIntoView(false), 60);
   const tokens = text.split(/\s+/).filter(Boolean);
   const starts=[]; let p=0;
   tokens.forEach(w=>{ const i=text.indexOf(w,p); starts.push(i); p=i+w.length; });
@@ -1264,58 +1148,20 @@ let rec=null, mediaStream=null, rafId=null;
 
 function ayahComplete(){
   beep("ok");
-  saveProgress();
-  const speakSoon = (after)=> setTimeout(()=> { scrollTransIntoView(true); speakTranslation(after); }, S.transDelay || 1000);
-
+  // Auto baca terjemahan bermula 1 saat selepas ayat selesai dibaca
+  const speakSoon = (after)=> setTimeout(()=> speakTranslation(after), S.transDelay || 1000);
   if(S.hafazan){
-    // ----- Ulangan gabungan (muraja'ah) satu kumpulan ayat -----
-    if(hafReviewMode){
-      if(aIdx < hafReviewEnd){
-        setStatus(`Bagus — teruskan ayat ${aIdx+2} tanpa henti.`);
-        setTimeout(()=>{ loadAyah(aIdx+1); resumeMicAuto(300); }, 600);
-        return;
-      }
-      hafReviewMode = false;
-      setStatus("Ulangan gabungan kumpulan ayat selesai. Meneruskan kumpulan seterusnya.");
-      const nxt = hafReviewEnd + 1;
-      hafChunkStart = nxt;
-      setTimeout(()=>{ if(nxt < current.ayat.length){ loadAyah(nxt); resumeMicAuto(400); } else setStatus("Tahniah! Hafazan surah ini selesai."); }, 900);
-      return;
-    }
-
     repDone++;
     if(repDone < S.repeat){
-      setStatus(`Bagus! Ulangan ${repDone}/${S.repeat} selesai. Ulang sekali lagi${S.hafHide!=="none"?" (teks disembunyikan)":""}.`);
-      const cont = ()=> setTimeout(()=>{
-        resetAyah();
-        if(S.hafAudioRepeat){
-          playAyah(aIdx, { onend: ()=>{ setStatus(`Ulangan ${repDone+1} daripada ${S.repeat} — sila baca semula.`); resumeMicAuto(300); } });
-        } else {
-          setStatus(`Ulangan ${repDone+1} daripada ${S.repeat} — sila baca semula.`);
-          resumeMicAuto(300);
-        }
-      }, 500);
-      speakSoon(cont);
+      setStatus(`Bagus! Ulang sekali lagi (${repDone}/${S.repeat}).`);
+      speakSoon(()=>{ setTimeout(()=>{ resetAyah(); setStatus(`Ulangan ${repDone+1} daripada ${S.repeat} — sila baca semula.`); resumeMicAuto(300); }, 500); });
       return;
     }
-
-    // Ayat ini sudah cukup ulangan
-    repDone = 0;
-    const chunk = Math.max(1, +S.hafChunk || 1);
-    const endOfChunk = ((aIdx - hafChunkStart + 1) >= chunk) || (aIdx + 1 >= current.ayat.length);
-    if(S.hafReview && chunk > 1 && endOfChunk && aIdx > hafChunkStart){
-      hafReviewMode = true; hafReviewEnd = aIdx;
-      setStatus(`Sekarang ulang gabungan ayat ${hafChunkStart+1} hingga ${hafReviewEnd+1} tanpa henti.`);
-      speakSoon(()=> setTimeout(()=>{ loadAyah(hafChunkStart, false); resumeMicAuto(400); }, 700));
-      return;
-    }
-    if(endOfChunk) hafChunkStart = aIdx + 1;
     setStatus("Hafazan ayat ini selesai. Meneruskan…");
     speakSoon(()=>setTimeout(()=>{ nextAyah(); resumeMicAuto(300); }, 700));
     return;
   }
-
-  if(marks.some(m=>m==="bad")) setStatus("Ayat selesai. Perkataan merah boleh diulang bila-bila masa.");
+  if(S.freeFlow && marks.some(m=>m==="bad")) setStatus("Ayat selesai. Meneruskan ke ayat seterusnya…");
   else setStatus("Ayat betul 100%.");
   speakSoon(()=>setTimeout(()=>{ nextAyah(); resumeMicAuto(300); }, 700));
 }
@@ -1323,21 +1169,6 @@ function ayahComplete(){
 /* Semakan perkataan demi perkataan.
    isFinal=false (interim) → hanya tandakan yang BETUL supaya semakan nampak serta-merta.
    isFinal=true → tandakan juga yang salah. */
-function fixOnce(i, msg){
-  if(fixedOnce[i]) { if(msg) setStatus(msg); return; }
-  fixedOnce[i] = true;
-  if(S.fixMode === "speak"){
-    drillWord = i; drillAt = Date.now();
-    setStatus("Perkataan itu belum tepat — dengar bacaan yang betul, kemudian teruskan.");
-    setTimeout(()=>playWord(i), 250);
-  } else if(S.fixMode === "silent"){
-    setStatus("Perkataan itu belum tepat (merah). Teruskan bacaan.");
-  } else {
-    if(S.strict !== false) beep("err");
-    setStatus("Perkataan itu belum tepat (merah). Teruskan bacaan — anda boleh ulang kemudian.");
-  }
-}
-
 function processSpoken(text, isFinal){
   if(!current) return;
   $("heard").textContent = text;
@@ -1349,34 +1180,23 @@ function processSpoken(text, isFinal){
     const judge = isFinal || si < sw.length-1;   // perkataan terakhir interim belum stabil
     if(cursor >= target.length) break;
 
-    /* --- Perkataan yang SUDAH hijau diulang baca: kekal hijau, kursor tidak berundur --- */
+    /* --- ULANG BACA: perkataan yang SUDAH hijau --- */
+    // Pengguna boleh mula semula dari mana-mana; perkataan hijau hanya berkelip,
+    // kursor TIDAK diundurkan dan tiada markah salah diberi.
     let already = -1;
     for(let j2=0;j2<cursor;j2++){
       if(marks[j2]==="ok" && similar(spoken, target[j2]) >= TOL()){ already = j2; break; }
     }
 
-    /* --- Membetulkan semula perkataan MERAH yang lepas (dibenarkan, tidak wajib) --- */
-    let fixBack = -1;
-    for(let j4=Math.max(0,cursor-6); j4<cursor; j4++){
-      if(marks[j4]==="bad" && similar(spoken, target[j4]) >= TOL()){ fixBack = j4; break; }
-    }
-    if(fixBack >= 0 && similar(spoken, target[cursor]) < TOL()){
-      marks[fixBack] = "ok"; flashWord = fixBack;
-      if(S.strict !== false) beep("ok");
-      setStatus("Bagus — perkataan itu sudah betul.");
-      render();
-      continue;
-    }
-
-    /* ===== MOD LATIH TUBI (bukan mod pantas) ===== */
-    if(!FAST() && S.drill && marks[cursor]==="bad"){
+    // MOD LATIH TUBI: perkataan sedang dibetulkan — wajib baca semula perkataan itu sahaja
+    if(!S.freeFlow && S.drill && marks[cursor]==="bad"){
       if(similar(spoken, target[cursor]) >= TOL()){
         marks[cursor]="ok"; cursor++; drillWord=-1; badTries=0;
         if(S.strict) beep("ok");
         setStatus("Bagus! Perkataan itu sudah betul. Teruskan bacaan.");
         continue;
       }
-      if(already >= 0){ flashWord = already; continue; }
+      if(already >= 0){ flashWord = already; continue; }   // sedang mengulang bahagian hijau
       if(!judge) continue;
       const bad = cursor;
       badTries++;
@@ -1393,49 +1213,47 @@ function processSpoken(text, isFinal){
       setStatus(badTries>=2
         ? "Masih belum tepat. Ulang lagi atau tekan butang Langkau."
         : "Belum tepat lagi. Sila ulang perkataan merah itu sehingga betul.");
-      continue;
+      continue;                            // jangan maju selagi belum betul
     }
 
-    /* --- Padanan tepat --- */
     if(similar(spoken, target[cursor]) >= TOL()){
       marks[cursor]="ok"; cursor++; badTries=0; continue;
     }
-
-    /* --- Pembaca melangkau ke hadapan: perkataan yang dilangkau terus jadi MERAH --- */
-    const AHEAD = FAST() ? 6 : 2;
-    let jumped = -1;
-    for(let k=1;k<=AHEAD && cursor+k<target.length;k++){
-      if(similar(spoken, target[cursor+k]) >= TOL()){ jumped = k; break; }
-    }
-    if(jumped > 0){
-      for(let j3=0;j3<jumped;j3++){
-        const idx = cursor+j3;
-        if(marks[idx] !== "ok"){ marks[idx] = "bad"; fixOnce(idx); }
+    // cuba padan dengan 1–2 perkataan berikutnya (kadang pengecaman gabung/lompat)
+    let jumped = false;
+    for(let k=1;k<=2 && cursor+k<target.length;k++){
+      if(similar(spoken, target[cursor+k]) >= TOL()){
+        for(let j3=0;j3<k;j3++){ if(marks[cursor+j3]!=="ok") marks[cursor+j3]="ok"; }
+        marks[cursor+k]="ok"; cursor+=k+1; badTries=0; jumped=true; break;
       }
-      marks[cursor+jumped]="ok"; cursor += jumped+1; badTries=0;
-      render();
-      continue;
     }
-
-    /* --- Dua perkataan dibaca bersambung --- */
+    if(jumped) continue;
+    // gabungan dua perkataan target (cth. dibaca bersambung)
     if(cursor+1 < target.length && similar(spoken, target[cursor]+target[cursor+1]) >= TOL()){
       marks[cursor]="ok"; marks[cursor+1]="ok"; cursor+=2; badTries=0; continue;
     }
-
+    // Perkataan hijau diulang baca — biar berkelip hijau sahaja, kursor kekal di tempatnya
     if(already >= 0){ flashWord = already; continue; }
     if(!judge) continue;                 // jangan hukum perkataan yang masih dituturkan
 
-    /* ===== MOD BACAAN PANTAS: salah terus merah & bacaan diteruskan ===== */
-    if(FAST()){
+    /* --- MOD BEBAS: salah kekal merah, dibetulkan sekali sahaja, bacaan diteruskan --- */
+    if(S.freeFlow){
       const bad = cursor;
-      if(marks[bad] !== "bad"){ marks[bad] = "bad"; fixOnce(bad); }
-      badTries++;
+      marks[bad]="bad";
       cursor++;
-      render();
+      const first = !fixedOnce[bad];
+      if(first){
+        fixedOnce[bad]=true;
+        if(S.strict) beep("err");
+        setStatus("Perkataan itu belum tepat — dengar bacaan yang betul, kemudian teruskan bacaan.");
+        if(S.autoFix){ drillWord=bad; drillAt=Date.now(); render(); setTimeout(()=>playWord(bad), 300); }
+      } else {
+        setStatus("Teruskan bacaan.");
+      }
       continue;
     }
 
-    /* ===== MOD KETAT (wajib betul sebelum teruskan) ===== */
+    if(marks[cursor] === "bad"){ badTries++; }
     if(marks[cursor] !== "bad"){
       marks[cursor]="bad";
       badTries = 1;
@@ -1444,15 +1262,13 @@ function processSpoken(text, isFinal){
         ? "Bacaan belum tepat. Sila ulang perkataan merah ini sehingga betul sebelum diteruskan."
         : "Bacaan tidak tepat. Tekan pada perkataan merah untuk mendengar bacaan yang betul.");
       if(S.autoFix){ const bad=cursor; drillWord=bad; drillAt=Date.now(); render(); setTimeout(()=>playWord(bad), 350); return; }
-    } else {
-      badTries++;
     }
-    if(!S.mustCorrect && !S.drill){ cursor++; }
+    if(!S.mustCorrect && !S.drill){ cursor++; }   // benarkan teruskan bila tetapan dimatikan
   }
 
   render();
   const finished = cursor >= target.length && marks.length &&
-    (FAST() ? marks.every(m=>m) : marks.every(m=>m==="ok"));
+    (S.freeFlow ? marks.every(m=>m) : marks.every(m=>m==="ok"));
   if(finished) ayahComplete();
 }
 
@@ -1550,7 +1366,7 @@ $("mic").onclick = ()=>{
 $("skip").onclick = ()=>{
   const t = currentAyah().split(/\s+/).filter(Boolean);
   const hasBad = marks.some(m=>m==="bad");
-  if(!FAST() && (!hasBad || badTries < 2)){
+  if(!S.freeFlow && (!hasBad || badTries < 2)){
     setStatus("Sila ulang baca perkataan merah sekurang-kurangnya 2 kali sebelum melangkau.");
     beep("err"); updateSkipBtn(); return;
   }
@@ -1609,10 +1425,7 @@ function initSettingsUI(){
   bindToggle("tg-speaktrans","speakTrans");
   bindToggle("tg-wbw","wbw", ()=>{ if(S.wbw) wbwFetch(); if(current) render(); });
   bindToggle("tg-hidehdr","hideHdr", ()=>{ hdrShown=false; applySettings(); });
-  bindToggle("tg-hafazan","hafazan", ()=>{
-    repDone = 0; hafReviewMode = false; hafChunkStart = aIdx;
-    if(current) render();
-  });
+  bindToggle("tg-hafazan","hafazan");
   bindToggle("tg-strict","strict");
   bindRange("set-repeat","repeat","rep-val");
   bindRange("set-size","size","size-val");
@@ -1626,17 +1439,6 @@ function initSettingsUI(){
   bindRange("set-arate","arate","arate-val",v=>v.toFixed(1));
   bindToggle("tg-autofix","autoFix");
   bindToggle("tg-freeflow","freeFlow", ()=>{ updateSkipBtn(); });
-  bindToggle("tg-fast","fastMode", ()=>{ updateSkipBtn(); });
-  bindToggle("tg-remember","rememberProgress");
-  bindToggle("tg-scrolltrans","autoScrollTrans");
-  $("set-fixmode").value = S.fixMode || "beep";
-  $("set-fixmode").onchange = e => { S.fixMode = e.target.value; saveSettings(); };
-  bindToggle("tg-haflisten","hafListenFirst");
-  bindToggle("tg-hafaudio","hafAudioRepeat");
-  bindToggle("tg-hafreview","hafReview");
-  bindRange("set-hafchunk","hafChunk","hafchunk-val");
-  $("set-hafhide").value = S.hafHide || "after1";
-  $("set-hafhide").onchange = e => { S.hafHide = e.target.value; saveSettings(); applySettings(); if(current) render(); };
   bindToggle("tg-autoplay","autoPlay");
   applySettings();
 }
