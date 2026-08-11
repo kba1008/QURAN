@@ -583,6 +583,8 @@ const $ = id => document.getElementById(id);
 let surahList = SURAH_FALLBACK; // senarai penuh 114 surah, sentiasa lengkap
 let current = null;       // {n,name,ayat:[],ms:[]}
 let aIdx=0, cursor=0, marks=[], listening=false, repDone=0, busy=false;
+let watchdog=null;
+const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 function setStatus(t){ $("status").textContent = t; }
 function currentAyah(){ return current.ayat[aIdx] || ""; }
@@ -778,7 +780,9 @@ function processSpoken(text, isFinal){
   const target = currentAyah().split(/\s+/).filter(Boolean).map(stripD);
   const sw = words(text);
 
-  for(const spoken of sw){
+  for(let si=0; si<sw.length; si++){
+    const spoken = sw[si];
+    const judge = isFinal || si < sw.length-1;   // perkataan terakhir interim belum stabil
     if(cursor >= target.length) break;
     if(similar(spoken, target[cursor]) >= TOL()){
       marks[cursor]="ok"; cursor++; continue;
@@ -796,7 +800,7 @@ function processSpoken(text, isFinal){
     if(cursor+1 < target.length && similar(spoken, target[cursor]+target[cursor+1]) >= TOL()){
       marks[cursor]="ok"; marks[cursor+1]="ok"; cursor+=2; continue;
     }
-    if(!isFinal) continue;               // jangan hukum semasa masih bercakap
+    if(!judge) continue;                 // jangan hukum perkataan yang masih dituturkan
     if(marks[cursor] !== "bad"){
       marks[cursor]="bad";
       if(S.strict){ beep("err"); }
@@ -810,6 +814,7 @@ function processSpoken(text, isFinal){
 
 async function startMeter(){
   try{
+    if(isMobile) return;      // di telefon, stream mikrofon berasingan boleh menyekat pengecaman suara
     if(!mediaStream) mediaStream = await navigator.mediaDevices.getUserMedia({audio:true});
     actx = actx || new (window.AudioContext||window.webkitAudioContext)();
     const src = actx.createMediaStreamSource(mediaStream);
@@ -833,17 +838,25 @@ function stopMeter(){
 
 async function startRec(){
   if(!SR){ setStatus("Pelayar ini tidak menyokong pengecaman suara. Sila guna Chrome (Android/desktop) atau Safari 16+."); return; }
-  // Minta kebenaran mikrofon dahulu supaya ralat jelas kepada pengguna
+  // Minta kebenaran mikrofon dahulu supaya ralat jelas, kemudian LEPASKAN stream itu
+  // (Chrome Android tidak dapat mendengar jika stream mikrofon lain masih terbuka).
   try{
-    if(!mediaStream) mediaStream = await navigator.mediaDevices.getUserMedia({audio:true});
+    const tmp = await navigator.mediaDevices.getUserMedia({audio:true});
+    tmp.getTracks().forEach(t=>t.stop());
   }catch(e){
     setStatus("Mikrofon tidak dibenarkan. Benarkan akses mikrofon, atau buka aplikasi dalam tab penuh.");
     return;
   }
+  if(mediaStream){ mediaStream.getTracks().forEach(t=>t.stop()); mediaStream=null; }
   listening = true;
   rec = new SR();
   rec.lang="ar-SA"; rec.continuous=true; rec.interimResults=true; rec.maxAlternatives=1;
-  const seen = {};              // bilangan perkataan yang sudah disemak bagi setiap segmen
+  const snaps = {};             // keadaan sebelum setiap segmen (interim boleh berubah-ubah)
+  let gotAny = false;
+  clearTimeout(watchdog);
+  watchdog = setTimeout(()=>{
+    if(!gotAny && listening) setStatus("Belum ada suara dikesan. Sila baca lebih kuat dan dekat dengan mikrofon (perlu talian internet untuk pengecaman).");
+  }, 8000);
   rec.onstart=()=>{
     listening=true;
     $("mic").classList.add("on"); $("mic-wrap").classList.add("on");
@@ -857,23 +870,21 @@ async function startRec(){
       setStatus("Pengecaman suara disekat. Buka aplikasi dalam tab penuh dan benarkan mikrofon.");
       return;
     }
+    if(e.error==="network"){ setStatus("Pengecaman suara perlukan talian internet. Sila sambung internet dan cuba semula."); return; }
     setStatus("Ralat mikrofon: "+e.error);
   };
   rec.onend=()=>{ if(listening){ setTimeout(()=>{ try{ rec.start(); }catch(e){} }, 250); } else stopUI(); };
   rec.onresult=(ev)=>{
+    gotAny = true;
     for(let i=ev.resultIndex;i<ev.results.length;i++){
       const r=ev.results[i], txt=(r[0].transcript||"").trim();
       if(!txt) continue;
-      const w = words(txt);
-      const done = seen[i] || 0;
-      const fresh = r.isFinal ? w.slice(done) : w.slice(done, Math.max(done, w.length-1)); // interim: abaikan perkataan terakhir (belum stabil)
-      if(fresh.length){
-        seen[i] = done + fresh.length;
-        processSpoken(fresh.join(" "), !!r.isFinal);
-      } else {
-        $("heard").textContent = txt;
-      }
-      if(r.isFinal) seen[i] = w.length;
+      // Teks interim sering DIKEMASKINI/DIBETULKAN oleh enjin, jadi setiap kali kita
+      // ulang-semak keseluruhan segmen bermula daripada keadaan sebelum segmen ini.
+      if(!snaps[i] || snaps[i].a !== aIdx) snaps[i] = { a:aIdx, cursor, marks: marks.slice() };
+      cursor = snaps[i].cursor; marks = snaps[i].marks.slice();
+      processSpoken(txt, !!r.isFinal);
+      if(r.isFinal) snaps[i] = { a:aIdx, cursor, marks: marks.slice() };
     }
   };
   try{ rec.start(); }catch(e){ try{ rec.stop(); }catch(_){} }
@@ -884,7 +895,7 @@ function stopUI(){
   $("state").textContent="Sedia"; $("state").classList.remove("live");
   stopMeter();
 }
-function stopRec(){ listening=false; if(rec){ try{rec.stop();}catch(e){} } stopUI(); }
+function stopRec(){ listening=false; clearTimeout(watchdog); if(rec){ try{rec.stop();}catch(e){} } stopUI(); }
 
 /* ============ 9. EVENT ============ */
 $("mic").onclick = ()=>{
