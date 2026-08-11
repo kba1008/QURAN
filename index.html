@@ -17,15 +17,63 @@
     --line:rgba(255,255,255,.08);
     --text:#eaf3ef; --muted:#8aa39a;
     --gold:#d8b678; --green:#2fbf71; --red:#ef4b5d;
+    --glow1:rgba(216,182,120,.10); --glow2:rgba(47,191,113,.08);
+    --field:#0e1815; --soft:rgba(255,255,255,.04);
     --radius:20px;
     --ayah-size:32px;
   }
+  /* ===== 5 TEMPLET WARNA ===== */
+  html[data-theme="emerald"]{ /* default gelap zamrud */
+    --bg:#0b1210; --panel:#111c19; --panel-2:#16241f; --line:rgba(255,255,255,.08);
+    --text:#eaf3ef; --muted:#8aa39a; --gold:#d8b678; --green:#2fbf71; --red:#ef4b5d;
+    --glow1:rgba(216,182,120,.10); --glow2:rgba(47,191,113,.08);
+    --field:#0e1815; --soft:rgba(255,255,255,.04);
+  }
+  html[data-theme="midnight"]{ /* gelap biru malam */
+    --bg:#0a1020; --panel:#121a30; --panel-2:#16203c; --line:rgba(255,255,255,.09);
+    --text:#e6ecff; --muted:#93a2c8; --gold:#8fb4ff; --green:#38d39f; --red:#ff6b81;
+    --glow1:rgba(143,180,255,.14); --glow2:rgba(56,211,159,.08);
+    --field:#0d1428; --soft:rgba(255,255,255,.05);
+  }
+  html[data-theme="ink"]{ /* gelap arang & emas */
+    --bg:#0e0e10; --panel:#17171a; --panel-2:#1e1e22; --line:rgba(255,255,255,.1);
+    --text:#f2efe9; --muted:#9c968c; --gold:#e4c07a; --green:#5fc98a; --red:#f2707f;
+    --glow1:rgba(228,192,122,.12); --glow2:rgba(255,255,255,.04);
+    --field:#141416; --soft:rgba(255,255,255,.05);
+  }
+  html[data-theme="pearl"]{ /* cerah mutiara hangat */
+    --bg:#f7f3ea; --panel:#ffffff; --panel-2:#fbf7ef; --line:rgba(20,30,25,.12);
+    --text:#1e2a24; --muted:#6b7a72; --gold:#a97f2f; --green:#17915a; --red:#c62b3d;
+    --glow1:rgba(169,127,47,.12); --glow2:rgba(23,145,90,.08);
+    --field:#fffdf8; --soft:rgba(20,30,25,.04);
+  }
+  html[data-theme="sky"]{ /* cerah biru lembut */
+    --bg:#eef4fb; --panel:#ffffff; --panel-2:#f4f8fd; --line:rgba(15,35,60,.12);
+    --text:#12212f; --muted:#5e7183; --gold:#1d6fd1; --green:#12855f; --red:#c33045;
+    --glow1:rgba(29,111,209,.12); --glow2:rgba(18,133,95,.08);
+    --field:#fbfdff; --soft:rgba(15,35,60,.04);
+  }
+  html[data-theme="pearl"] .card,html[data-theme="sky"] .card{box-shadow:0 18px 40px -28px rgba(0,0,0,.45)}
+  html[data-theme="pearl"] .dock,html[data-theme="sky"] .dock{
+    background:linear-gradient(180deg,rgba(255,255,255,0),var(--bg) 35%)}
+  /* ===== WARNA HUKUM TAJWID (standard antarabangsa) ===== */
+  .tj-m6{color:#e1301c}            /* Madd lazim / wajib — 6 harakat */
+  .tj-m4{color:#f0a500}            /* Madd wajib muttasil / jaiz — 4-5 harakat */
+  .tj-m2{color:#537fff}            /* Madd asli — 2 harakat */
+  .tj-ghn{color:#ff7e1e}           /* Ghunnah musyaddadah */
+  .tj-ikh{color:#9400a8}           /* Ikhfa' */
+  .tj-idg{color:#169777}           /* Idgham bighunnah */
+  .tj-idgw{color:#8c8c8c}          /* Idgham bila ghunnah */
+  .tj-iql{color:#26bffd}           /* Iqlab */
+  .tj-qal{color:#dd0008}           /* Qalqalah */
+  .tj-key{display:flex;flex-wrap:wrap;gap:10px;font-size:11px;margin-top:10px;color:var(--muted)}
+  .tj-key b{font-weight:700}
   *{box-sizing:border-box}
   html,body{margin:0;height:100%}
   body{
     background:
-      radial-gradient(1000px 600px at 50% -20%, rgba(216,182,120,.10), transparent 60%),
-      radial-gradient(700px 500px at 100% 100%, rgba(47,191,113,.08), transparent 60%),
+      radial-gradient(1000px 600px at 50% -20%, var(--glow1), transparent 60%),
+      radial-gradient(700px 500px at 100% 100%, var(--glow2), transparent 60%),
       var(--bg);
     color:var(--text); font-family:Manrope,system-ui,sans-serif;
     -webkit-tap-highlight-color:transparent;
@@ -46,7 +94,7 @@
   .card{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--line);
     border-radius:var(--radius);padding:18px;box-shadow:0 24px 60px -30px rgba(0,0,0,.9)}
   .row{display:flex;gap:10px;flex-wrap:wrap}
-  select,input[type=text],input[type=number]{flex:1;min-width:130px;background:#0e1815;color:var(--text);border:1px solid var(--line);
+  select,input[type=text],input[type=number]{flex:1;min-width:130px;background:var(--field);color:var(--text);border:1px solid var(--line);
     border-radius:14px;padding:12px 14px;font-family:inherit;font-size:14px;outline:none}
   .meta{display:flex;justify-content:space-between;align-items:center;margin:18px 2px 10px;font-size:12px;color:var(--muted)}
   .ayah{
@@ -65,13 +113,13 @@
   @keyframes shake{25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
   .bar{height:6px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden;margin-top:6px}
   .bar > i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--green),var(--gold));transition:width .3s}
-  .trans{margin-top:16px;padding-top:14px;border-top:1px dashed var(--line);font-size:15px;line-height:1.9;color:#cfe0d9}
+  .trans{margin-top:16px;padding-top:14px;border-top:1px dashed var(--line);font-size:15px;line-height:1.9;color:var(--text);opacity:.9}
   .trans .tw{padding:1px 3px;border-radius:6px;transition:background .12s,color .12s}
-  .trans .tw.on{background:var(--gold);color:#241a08;font-weight:700}
+  .trans .tw.on{background:var(--gold);color:var(--bg);font-weight:700}
   .heard{margin-top:14px;font-size:13px;color:var(--muted);direction:rtl;text-align:right;min-height:20px}
   .status{margin-top:12px;font-size:13px;color:var(--muted)}
   .dock{position:fixed;left:0;right:0;bottom:0;padding:14px 18px calc(18px + env(safe-area-inset-bottom));
-    background:linear-gradient(180deg,rgba(11,18,16,0),rgba(11,18,16,.92) 35%);backdrop-filter:blur(10px)}
+    background:linear-gradient(180deg,transparent,var(--bg) 38%);backdrop-filter:blur(10px)}
   .dock-in{max-width:820px;margin:0 auto;display:flex;align-items:center;gap:14px;justify-content:center}
   button{font-family:inherit;cursor:pointer;border:none}
   .btn{background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--text);
@@ -156,6 +204,17 @@
       <span><i class="dot" style="background:var(--gold)"></i>Sedang dibaca</span>
       <span id="rep-badge" hidden></span>
     </div>
+    <div class="tj-key" id="tj-key" hidden>
+      <span><b class="tj-m6">مـد</b> Madd 6 harakat</span>
+      <span><b class="tj-m4">مـد</b> Madd 4-5 harakat</span>
+      <span><b class="tj-m2">مـد</b> Madd asli 2 harakat</span>
+      <span><b class="tj-ghn">نّ</b> Ghunnah</span>
+      <span><b class="tj-ikh">نْ</b> Ikhfa'</span>
+      <span><b class="tj-idg">نْ</b> Idgham bighunnah</span>
+      <span><b class="tj-idgw">نْ</b> Idgham bila ghunnah</span>
+      <span><b class="tj-iql">نْب</b> Iqlab</span>
+      <span><b class="tj-qal">قْ</b> Qalqalah</span>
+    </div>
   </div>
 </div>
 
@@ -184,6 +243,20 @@
       </div>
     </div>
 
+    <div class="fld">
+      <label>Templet warna aplikasi</label>
+      <select id="set-theme">
+        <option value="emerald">Gelap — Zamrud &amp; Emas</option>
+        <option value="midnight">Gelap — Biru Malam</option>
+        <option value="ink">Gelap — Arang &amp; Emas</option>
+        <option value="pearl">Cerah — Mutiara Hangat</option>
+        <option value="sky">Cerah — Biru Lembut</option>
+      </select>
+    </div>
+
+    <div class="switch"><span>Warna hukum tajwid</span><div class="tg" id="tg-tajwid"></div></div>
+    <div class="switch"><span>Auto buka mikrofon selepas app habis bercakap</span><div class="tg" id="tg-automic"></div></div>
+    <div class="switch"><span>Wajib betul sebelum teruskan</span><div class="tg" id="tg-mustcorrect"></div></div>
     <div class="switch"><span>Paparkan teks ayat</span><div class="tg" id="tg-showtext"></div></div>
     <div class="switch"><span>Paparkan terjemahan</span><div class="tg" id="tg-showtrans"></div></div>
     <div class="switch"><span>Auto baca terjemahan (BM)</span><div class="tg" id="tg-speaktrans"></div></div>
@@ -434,7 +507,8 @@ const LS = {
 const DEFAULTS = {
   showText:true, showTrans:true, speakTrans:true, hafazan:false, strict:true,
   repeat:3, size:32, tsize:15, rate:1, tol:72, voice:"",
-  qari:"ar.alafasy", arate:1, autoFix:true, autoPlay:false
+  qari:"ar.alafasy", arate:1, autoFix:true, autoPlay:false,
+  theme:"emerald", tajwid:true, autoMic:true, mustCorrect:true, transDelay:1000
 };
 let profile = LS.get("tasmi.profile","Pengguna");
 let S = { ...DEFAULTS };
@@ -517,8 +591,7 @@ function stopAudio(){
 function playAyah(i, opts){
   opts = opts || {};
   const idx = (typeof i === "number") ? i : aIdx;
-  const wasListening = listening;
-  if(wasListening) stopRec();
+  pauseMicAuto();
   stopAudio();
   const urls = audioUrls(idx);
   let t = 0;
@@ -528,7 +601,7 @@ function playAyah(i, opts){
     a.preload = "auto";
     a.playbackRate = S.arate || 1;
     a.onerror = ()=>{ if(player===a){ tryPlay(); } };
-    a.onended = ()=>{ stopAudio(); if(opts.onend) opts.onend(); };
+    a.onended = ()=>{ stopAudio(); if(opts.onend) opts.onend(); resumeMicAuto(500); };
     player = a; playingIdx = idx;
     const btn = $("listen"); if(btn) btn.textContent = "■ Henti";
     setStatus(`Mendengar bacaan betul — ${qari().name} · Ayat ${idx+1}.`);
@@ -564,18 +637,111 @@ function playWord(tokenIdx, ayahIdx){
   const idx = (typeof ayahIdx === "number") ? ayahIdx : aIdx;
   const url = wordAudioUrl(idx, tokenIdx);
   if(!url){ playAyah(idx); return; }
-  if(listening) stopRec();
+  pauseMicAuto();
   stopAudio();
   const a = new Audio(url);
   a.preload = "auto";
   a.playbackRate = S.arate || 1;
   a.onerror = ()=>{ if(player===a){ player=null; playAyah(idx); } };
-  a.onended = ()=> stopAudio();
+  a.onended = ()=>{ stopAudio(); resumeMicAuto(500); };
   player = a; playingIdx = idx;
   const btn = $("listen"); if(btn) btn.textContent = "■ Henti";
   const tok = (current.ayat[idx]||"").split(/\s+/).filter(Boolean)[tokenIdx] || "";
   setStatus(`Bacaan betul bagi perkataan: ${tok}`);
   a.play().catch(()=>{});
+}
+
+/* ============ 4c. AUTO MIC (jeda & sambung semula automatik) ============ */
+let micAuto = false;      // true bila mic dijeda oleh app sendiri
+function pauseMicAuto(){
+  if(listening){ micAuto = true; stopRec(); }
+}
+function resumeMicAuto(delay){
+  if(!S.autoMic || !micAuto) return;
+  micAuto = false;
+  setTimeout(()=>{ if(!listening) startRec(); }, delay || 400);
+}
+
+/* ============ 4d. WARNA HUKUM TAJWID (standard antarabangsa) ============ */
+const HARAKAT = "\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED";
+const IKHFA   = "\u062A\u062B\u062C\u062F\u0630\u0632\u0633\u0634\u0635\u0636\u0637\u0638\u0641\u0642\u0643";
+const IDGHAM_G= "\u064A\u0646\u0645\u0648";
+const IDGHAM_W= "\u0644\u0631";
+const QALQ    = "\u0642\u0637\u0628\u062C\u062F";
+const HAMZ    = "\u0621\u0623\u0625\u0624\u0626\u0622";
+const TANWIN  = "\u064B\u064C\u064D";
+const escHtml = t => t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+/* Pewarnaan anggaran mengikut kunci warna tajwid antarabangsa */
+function tajwidHTML(word, nextWord){
+  const chars = Array.from(word);
+  const cls = new Array(chars.length).fill(null);
+  const isH = c => new RegExp("["+HARAKAT+"]").test(c);
+  const marksAfter = i => { let out=""; for(let j=i+1;j<chars.length && isH(chars[j]);j++) out+=chars[j]; return out; };
+  const nextLetter = i => { for(let j=i+1;j<chars.length;j++){ if(!isH(chars[j])) return chars[j]; } 
+    const nw = Array.from(nextWord||""); for(const c of nw){ if(!isH(c)) return c; } return ""; };
+
+  for(let i=0;i<chars.length;i++){
+    const c = chars[i];
+    if(isH(c)) continue;
+    const m = marksAfter(i);
+    const shadda = m.indexOf("\u0651")>=0;
+    const sukun  = m.indexOf("\u0652")>=0;
+    const tanwin = new RegExp("["+TANWIN+"]").test(m);
+    const bare   = m.replace(/[\u0651\u0652]/g,"") === "" && !tanwin;
+
+    // Ghunnah musyaddadah (نّ / مّ)
+    if(shadda && (c==="\u0646" || c==="\u0645")){ cls[i]="tj-ghn"; continue; }
+
+    // Madd
+    if(c==="\u0622"){ cls[i]="tj-m4"; continue; }              // alif maddah
+    if(c==="\u0627" || c==="\u0648" || c==="\u064A" || c==="\u0670"){
+      const nl = nextLetter(i);
+      const prevH = (()=>{ for(let j=i-1;j>=0;j--){ if(isH(chars[j])) return chars[j]; if(!isH(chars[j])) return ""; } return ""; })();
+      const isMaddLetter = (c==="\u0670") || bare || (c==="\u0627");
+      if(isMaddLetter){
+        const nm = (()=>{ // tanda pada huruf berikutnya
+          let k=i+1; while(k<chars.length && isH(chars[k])) k++;
+          if(k<chars.length) return marksAfter(k);
+          return "";
+        })();
+        if(new RegExp("["+HAMZ+"]").test(nl)) cls[i]="tj-m4";
+        else if(nm.indexOf("\u0651")>=0 || nm.indexOf("\u0652")>=0) cls[i]="tj-m6";
+        else cls[i]="tj-m2";
+        continue;
+      }
+    }
+
+    // Nun sakinah / tanwin
+    if((c==="\u0646" && sukun) || tanwin){
+      const nl = nextLetter(i);
+      if(nl==="\u0628") cls[i]="tj-iql";
+      else if(new RegExp("["+IDGHAM_G+"]").test(nl)) cls[i]="tj-idg";
+      else if(new RegExp("["+IDGHAM_W+"]").test(nl)) cls[i]="tj-idgw";
+      else if(new RegExp("["+IKHFA+"]").test(nl)) cls[i]="tj-ikh";
+      continue;
+    }
+    // Mim sakinah
+    if(c==="\u0645" && sukun){
+      const nl = nextLetter(i);
+      if(nl==="\u0628") cls[i]="tj-ikh";
+      else if(nl==="\u0645") cls[i]="tj-idg";
+      continue;
+    }
+    // Qalqalah
+    if(new RegExp("["+QALQ+"]").test(c) && (sukun || (bare && i>=chars.length-2))){ cls[i]="tj-qal"; continue; }
+  }
+
+  let out="", i=0;
+  while(i<chars.length){
+    let k = cls[i];
+    let seg = escHtml(chars[i]); let j=i+1;
+    while(j<chars.length && isH(chars[j])){ seg += escHtml(chars[j]); j++; }
+    if(!k && seg.indexOf("\u0670")>=0) k = "tj-m2";   // alif khanjariah = madd asli
+    out += k ? `<span class="${k}">${seg}</span>` : seg;
+    i=j;
+  }
+  return out;
 }
 
 /* ============ 5. STATE & UI ============ */
@@ -590,6 +756,9 @@ function setStatus(t){ $("status").textContent = t; }
 function currentAyah(){ return current.ayat[aIdx] || ""; }
 
 function applySettings(){
+  document.documentElement.setAttribute("data-theme", S.theme || "emerald");
+  const tc = { emerald:"#0b1210", midnight:"#0a1020", ink:"#0e0e10", pearl:"#f7f3ea", sky:"#eef4fb" }[S.theme||"emerald"];
+  const meta = document.querySelector('meta[name="theme-color"]'); if(meta) meta.setAttribute("content", tc);
   document.documentElement.style.setProperty("--ayah-size", S.size+"px");
   $("trans").style.fontSize = S.tsize+"px";
   $("ayah-text").classList.toggle("hidden-text", !S.showText);
@@ -608,9 +777,11 @@ function fillAyahSelect(){
 
 function render(){
   const w = currentAyah().split(/\s+/).filter(Boolean);
+  $("tj-key").hidden = !S.tajwid;
   $("ayah-text").innerHTML = w.map((t,i)=>{
     const cls = marks[i]==="ok"?"ok":marks[i]==="bad"?"bad":(i===cursor?"cur":"");
-    return `<span class="w ${cls}" data-i="${i}" role="button" tabindex="0" title="Tekan untuk dengar bacaan betul">${t}</span>`;
+    const inner = (S.tajwid && !marks[i]) ? tajwidHTML(t, w[i+1]) : escHtml(t);
+    return `<span class="w ${cls}" data-i="${i}" role="button" tabindex="0" title="Tekan untuk dengar bacaan betul">${inner}</span>`;
   }).join(" ");
   const done = marks.filter(m=>m==="ok").length;
   const pct = w.length? Math.round(done/w.length*100):0;
@@ -718,6 +889,7 @@ function pickVoice(){
 function speakTranslation(done){
   const text = (current.ms && current.ms[aIdx]) || "";
   if(!S.speakTrans || !text || !window.speechSynthesis){ done && done(); return; }
+  pauseMicAuto();
   const tokens = text.split(/\s+/).filter(Boolean);
   const starts=[]; let p=0;
   tokens.forEach(w=>{ const i=text.indexOf(w,p); starts.push(i); p=i+w.length; });
@@ -745,7 +917,7 @@ function speakTranslation(done){
       timer = setInterval(()=>{ renderTrans(i); i++; if(i>=tokens.length) clearInterval(timer); }, per);
     }, 350);
   };
-  const finish = ()=>{ if(timer) clearInterval(timer); renderTrans(-1); done && done(); };
+  const finish = ()=>{ if(timer) clearInterval(timer); renderTrans(-1); resumeMicAuto(600); done && done(); };
   u.onend = finish; u.onerror = finish;
   speechSynthesis.speak(u);
 }
@@ -756,19 +928,21 @@ let rec=null, mediaStream=null, rafId=null;
 
 function ayahComplete(){
   beep("ok");
+  // Auto baca terjemahan bermula 1 saat selepas ayat selesai dibaca
+  const speakSoon = (after)=> setTimeout(()=> speakTranslation(after), S.transDelay || 1000);
   if(S.hafazan){
     repDone++;
     if(repDone < S.repeat){
       setStatus(`Bagus! Ulang sekali lagi (${repDone}/${S.repeat}).`);
-      speakTranslation(()=>{ setTimeout(()=>{ resetAyah(); setStatus(`Ulangan ${repDone+1} daripada ${S.repeat} — sila baca semula.`); }, 500); });
+      speakSoon(()=>{ setTimeout(()=>{ resetAyah(); setStatus(`Ulangan ${repDone+1} daripada ${S.repeat} — sila baca semula.`); resumeMicAuto(300); }, 500); });
       return;
     }
     setStatus("Hafazan ayat ini selesai. Meneruskan…");
-    speakTranslation(()=>setTimeout(nextAyah, 700));
+    speakSoon(()=>setTimeout(()=>{ nextAyah(); resumeMicAuto(300); }, 700));
     return;
   }
   setStatus("Ayat betul 100%.");
-  speakTranslation(()=>setTimeout(nextAyah, 700));
+  speakSoon(()=>setTimeout(()=>{ nextAyah(); resumeMicAuto(300); }, 700));
 }
 
 /* Semakan perkataan demi perkataan.
@@ -800,13 +974,21 @@ function processSpoken(text, isFinal){
     if(cursor+1 < target.length && similar(spoken, target[cursor]+target[cursor+1]) >= TOL()){
       marks[cursor]="ok"; marks[cursor+1]="ok"; cursor+=2; continue;
     }
+    // ULANG BACA: pengguna mengulang ayat/perkataan yang sudah betul — jangan kira salah,
+    // cuma selaraskan semula kedudukan kursor.
+    let back = -1;
+    for(let j=0;j<cursor;j++){ if(similar(spoken, target[j]) >= TOL()){ back = j; break; } }
+    if(back >= 0){ marks[back]="ok"; cursor = back+1; continue; }
     if(!judge) continue;                 // jangan hukum perkataan yang masih dituturkan
     if(marks[cursor] !== "bad"){
       marks[cursor]="bad";
       if(S.strict){ beep("err"); }
-      setStatus("Bacaan tidak tepat. Tekan pada perkataan merah untuk mendengar bacaan yang betul.");
+      setStatus(S.mustCorrect
+        ? "Bacaan belum tepat. Sila ulang perkataan merah ini sehingga betul sebelum diteruskan."
+        : "Bacaan tidak tepat. Tekan pada perkataan merah untuk mendengar bacaan yang betul.");
       if(S.autoFix){ const bad=cursor; render(); setTimeout(()=>playWord(bad), 350); return; }
     }
+    if(!S.mustCorrect){ cursor++; }      // benarkan teruskan bila tetapan dimatikan
   }
   render();
   if(cursor >= target.length && marks.length && marks.every(m=>m==="ok")) ayahComplete();
@@ -901,9 +1083,13 @@ function stopRec(){ listening=false; clearTimeout(watchdog); if(rec){ try{rec.st
 $("mic").onclick = ()=>{
   try{ (actx=actx||new (window.AudioContext||window.webkitAudioContext)()).resume(); }catch(e){}
   if(window.speechSynthesis){ try{ speechSynthesis.resume(); }catch(e){} }
-  listening ? stopRec() : startRec();
+  if(listening){ micAuto=false; stopRec(); } else { micAuto=false; startRec(); }
 };
 $("skip").onclick = ()=>{
+  if(S.mustCorrect && marks.some(m=>m==="bad")){
+    setStatus("Tetapan 'Wajib betul sebelum teruskan' aktif — sila betulkan perkataan merah dahulu.");
+    beep("err"); return;
+  }
   const t = currentAyah().split(/\s+/).filter(Boolean);
   if(cursor < t.length){ marks[cursor]="bad"; cursor++; render(); setStatus("Perkataan dilangkau."); }
   else nextAyah();
@@ -937,6 +1123,11 @@ function bindRange(id,key,valId,fmt){
 }
 function initSettingsUI(){
   $("set-profile").value = profile;
+  $("set-theme").value = S.theme || "emerald";
+  $("set-theme").onchange = e => { S.theme = e.target.value; saveSettings(); applySettings(); };
+  bindToggle("tg-tajwid","tajwid");
+  bindToggle("tg-automic","autoMic");
+  bindToggle("tg-mustcorrect","mustCorrect");
   bindToggle("tg-showtext","showText");
   bindToggle("tg-showtrans","showTrans");
   bindToggle("tg-speaktrans","speakTrans");
