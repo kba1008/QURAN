@@ -758,6 +758,10 @@ const stripD = s => s
   .replace(/\u0624/g,"\u0648").replace(/\u0626/g,"\u064A")
   .replace(/[^\u0621-\u064A\s]/g," ").replace(/\s+/g," ").trim();
 const words = s => stripD(s).split(" ").filter(Boolean);
+/* Token semakan sahaja: tanda waqaf/rumuz mushaf yang berdiri sendiri (contoh ٢)
+   tidak menjadi "perkataan" dan tidak akan menahan kursor semakan. */
+const ayahTokens = s => (s || "").split(/\s+/).filter(Boolean)
+  .filter(t => stripD(t).length > 0);
 
 function lev(a,b){
   const m=a.length,n=b.length; if(!m)return n; if(!n)return m;
@@ -801,7 +805,8 @@ const QARI = [
   {id:"ar.saoodshuraym",  name:"Saood Ash-Shuraym", ea:"Saood_ash-Shuraym_128kbps"},
   {id:"ar.abdulbasitmurattal", name:"Abdul Basit (Murattal)", ea:"Abdul_Basit_Murattal_192kbps"}
 ];
-let player = null, playingIdx = -1;
+let player = null, playingIdx = -1, playingWord = -1;
+let correctionTimer = null, lastCorrectionKey = "", lastCorrectionAt = 0;
 
 function qari(){ return QARI.find(q=>q.id===S.qari) || QARI[0]; }
 function globalAyahNum(i){
@@ -818,7 +823,7 @@ function audioUrls(i){
 }
 function stopAudio(){
   if(player){ try{ player.pause(); }catch(e){} player = null; }
-  playingIdx = -1;
+  playingIdx = -1; playingWord = -1;
   document.querySelectorAll(".w.play").forEach(el=>el.classList.remove("play"));
   const b = $("listen"); if(b) b.innerHTML = '<span class="di">▶</span><span class="dl">Dengar</span>';
 }
@@ -854,9 +859,8 @@ const BISMILLAH = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَ
 const hasArabic = t => /[\u0621-\u064A]/.test(stripD(t));
 /* nombor perkataan mengikut penomboran quran.com (tanda waqaf tidak dikira) */
 function wordAudioUrl(ayahIdx, tokenIdx){
-  const toks = (current.ayat[ayahIdx]||"").split(/\s+/).filter(Boolean);
-  let no = 0;
-  for(let i=0;i<=tokenIdx && i<toks.length;i++){ if(hasArabic(toks[i])) no++; }
+  const toks = ayahTokens(current.ayat[ayahIdx]||"");
+  const no = Math.min(tokenIdx + 1, toks.length);
   if(no === 0) return null;
   let sur = current.n, ay = ayahIdx+1, w = no;
   // Bismillah pada ayat pertama surah (kecuali Al-Fatihah & At-Taubah) bukan sebahagian ayat 1 di quran.com
@@ -870,6 +874,10 @@ function wordAudioUrl(ayahIdx, tokenIdx){
 /* Mainkan bacaan betul bagi SATU perkataan; jika gagal, main keseluruhan ayat */
 function playWord(tokenIdx, ayahIdx){
   const idx = (typeof ayahIdx === "number") ? ayahIdx : aIdx;
+  /* Keputusan interim boleh tiba berkali-kali untuk kesalahan yang sama. Jangan
+     hentikan dan mulakan semula audio yang sedang berbunyi — itu menyebabkan
+     hanya huruf hadapan kedengaran berulang-ulang. */
+  if(player && playingIdx === idx && playingWord === tokenIdx) return;
   const url = wordAudioUrl(idx, tokenIdx);
   if(!url){ playAyah(idx); return; }
   pauseMicAuto();
@@ -879,11 +887,26 @@ function playWord(tokenIdx, ayahIdx){
   a.playbackRate = S.arate || 1;
   a.onerror = ()=>{ if(player===a){ player=null; playAyah(idx); } };
   a.onended = ()=>{ stopAudio(); resumeMicAuto(500); };
-  player = a; playingIdx = idx;
+  player = a; playingIdx = idx; playingWord = tokenIdx;
   const btn = $("listen"); if(btn) btn.innerHTML = '<span class="di">■</span><span class="dl">Henti</span>';
-  const tok = (current.ayat[idx]||"").split(/\s+/).filter(Boolean)[tokenIdx] || "";
+  const tok = ayahTokens(current.ayat[idx]||"")[tokenIdx] || "";
   setStatus(`Bacaan betul bagi perkataan: ${tok}`);
   a.play().catch(()=>{});
+}
+/* Satukan semua permintaan pembetulan bagi perkataan yang sama kepada satu
+   mainan audio penuh. Ini menghapuskan audio bertindih/tersangkut. */
+function scheduleWordCorrection(tokenIdx, delay){
+  const targetAyah = aIdx;
+  const key = `${targetAyah}:${tokenIdx}`;
+  const now = Date.now();
+  if((player && playingIdx === aIdx && playingWord === tokenIdx) ||
+     (key === lastCorrectionKey && now - lastCorrectionAt < 1800)) return;
+  clearTimeout(correctionTimer);
+  correctionTimer = setTimeout(()=>{
+    if(aIdx !== targetAyah) return;
+    lastCorrectionKey = key; lastCorrectionAt = Date.now();
+    playWord(tokenIdx, targetAyah);
+  }, delay || 300);
 }
 
 /* ============ 4c. AUTO MIC (jeda & sambung semula automatik) ============ */
@@ -1072,7 +1095,7 @@ function wbwGet(){
   if(!S.wbw) return null;
   const g = WBW[wbwKey()];
   if(!g) return null;
-  const n = currentAyah().split(/\s+/).filter(Boolean).length;
+  const n = ayahTokens(currentAyah()).length;
   // ayat pertama mungkin ada Bismillah di depan — padankan dari belakang
   if(g.length < n) return new Array(n-g.length).fill("").concat(g);
   return g.slice(g.length-n);
@@ -1105,7 +1128,7 @@ async function wbwFetch(){
   setStatus("Terjemahan setiap perkataan perlukan talian internet buat kali pertama ayat ini.");
 }
 function render(){
-  const w = currentAyah().split(/\s+/).filter(Boolean);
+  const w = ayahTokens(currentAyah());
   $("tj-key").hidden = !S.tajwid;
   const gloss = wbwGet();
   $("ayah-text").innerHTML = w.map((t,i)=>{
@@ -1160,7 +1183,7 @@ function loadAyah(i,resetRep=true){
   bestCursor = 0; bestMarks = [];
   aIdx = Math.max(0, Math.min(+i || 0, current.ayat.length-1));
   cursor=0; if(resetRep) repDone=0; drillWord=-1; drillAt=0; badTries=0; fixedOnce={};
-  marks = new Array(currentAyah().split(/\s+/).filter(Boolean).length).fill(null);
+  marks = new Array(ayahTokens(currentAyah()).length).fill(null);
   $("ayah").value = aIdx;
   $("surah").value = current.n;
   render();
@@ -1348,7 +1371,7 @@ function ayahComplete(){
 function processSpoken(text, isFinal){
   if(!current) return;
   $("heard").textContent = text;
-  const target = currentAyah().split(/\s+/).filter(Boolean).map(stripD);
+  const target = ayahTokens(currentAyah()).map(stripD);
   const sw = words(text);
 
   for(let si=0; si<sw.length; si++){
@@ -1383,7 +1406,7 @@ function processSpoken(text, isFinal){
         setStatus(badTries>=2
           ? "Belum tepat lagi. Anda boleh tekan butang Langkau, atau ulang perkataan merah itu."
           : "Belum tepat lagi. Dengar bacaan yang betul, kemudian ulang perkataan merah itu.");
-        setTimeout(()=>playWord(bad), 300);
+        scheduleWordCorrection(bad, 300);
         return;
       }
       setStatus(badTries>=2
@@ -1422,7 +1445,7 @@ function processSpoken(text, isFinal){
         fixedOnce[bad]=true;
         if(S.strict) beep("err");
         setStatus("Perkataan itu belum tepat — dengar bacaan yang betul, kemudian teruskan bacaan.");
-        if(S.autoFix){ drillWord=bad; drillAt=Date.now(); render(); setTimeout(()=>playWord(bad), 300); }
+        if(S.autoFix){ drillWord=bad; drillAt=Date.now(); render(); scheduleWordCorrection(bad, 300); }
       } else {
         setStatus("Teruskan bacaan.");
       }
@@ -1437,7 +1460,7 @@ function processSpoken(text, isFinal){
       setStatus((S.drill || S.mustCorrect)
         ? "Bacaan belum tepat. Sila ulang perkataan merah ini sehingga betul sebelum diteruskan."
         : "Bacaan tidak tepat. Tekan pada perkataan merah untuk mendengar bacaan yang betul.");
-      if(S.autoFix){ const bad=cursor; drillWord=bad; drillAt=Date.now(); render(); setTimeout(()=>playWord(bad), 350); return; }
+      if(S.autoFix){ const bad=cursor; drillWord=bad; drillAt=Date.now(); render(); scheduleWordCorrection(bad, 350); return; }
     }
     if(!S.mustCorrect && !S.drill){ cursor++; }   // benarkan teruskan bila tetapan dimatikan
   }
@@ -1622,7 +1645,7 @@ $("mic").onclick = ()=>{
   if(listening){ micAuto=false; stopRec(); } else { micAuto=false; startRec(); }
 };
 $("skip").onclick = ()=>{
-  const t = currentAyah().split(/\s+/).filter(Boolean);
+  const t = ayahTokens(currentAyah());
   const hasBad = marks.some(m=>m==="bad");
   if(!S.freeFlow && (!hasBad || badTries < 2)){
     setStatus("Sila ulang baca perkataan merah sekurang-kurangnya 2 kali sebelum melangkau.");
