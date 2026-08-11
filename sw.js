@@ -3,7 +3,7 @@
    - Navigasi HTML: Network First (sentiasa cuba versi terkini, fallback cache bila offline)
    - Aset statik: Cache First
 */
-const CACHE = "tasmi-v7";
+const CACHE = "tasmi-v8";
 const ASSETS = [
   "./",
   "./index.html",

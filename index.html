@@ -160,8 +160,48 @@
   .tg.on::after{transform:translateX(20px)}
   input[type=range]{width:100%;accent-color:var(--gold)}
   .btn-gold{background:linear-gradient(160deg,var(--gold),#a97f3f);color:#241a08;font-weight:800;
-    width:100%;padding:14px;border-radius:16px;font-size:15px;margin-top:6px}
+    width:100%;padding:14px;border-radius:16px;font-size:15px;margin-top:6px;
+    box-shadow:0 16px 30px -18px rgba(0,0,0,.9),0 1px 0 rgba(255,255,255,.4) inset}
+  /* ===== GAYA 3D & KORPORAT ===== */
+  .card{position:relative;overflow:hidden;
+    box-shadow:0 34px 64px -34px rgba(0,0,0,.9),0 1px 0 rgba(255,255,255,.07) inset,0 -1px 0 rgba(0,0,0,.4) inset}
+  .card::before{content:"";position:absolute;left:0;right:0;top:0;height:120px;pointer-events:none;
+    background:linear-gradient(180deg,rgba(255,255,255,.07),transparent)}
+  .card > *{position:relative}
+  .btn{background:linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,.03));
+    box-shadow:0 10px 20px -12px rgba(0,0,0,.85),0 1px 0 rgba(255,255,255,.14) inset;
+    transition:transform .12s ease,box-shadow .12s ease}
+  .btn:hover{transform:translateY(-1px)}
+  .btn:active{transform:translateY(1px) scale(.98);box-shadow:0 4px 10px -8px rgba(0,0,0,.9) inset}
+  .icon-btn{background:linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,.03));
+    box-shadow:0 8px 16px -12px rgba(0,0,0,.9),0 1px 0 rgba(255,255,255,.14) inset}
+  .logo{box-shadow:0 12px 22px -14px rgba(0,0,0,.95),0 1px 0 rgba(255,255,255,.18) inset}
+  .mic{box-shadow:0 24px 46px -14px rgba(216,182,120,.6),0 2px 0 rgba(255,255,255,.4) inset,
+    0 -8px 16px -8px rgba(0,0,0,.45) inset}
+  select,input[type=text],input[type=number]{
+    box-shadow:0 3px 8px -6px rgba(0,0,0,.85) inset,0 1px 0 rgba(255,255,255,.06)}
+  .switch{background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02));
+    box-shadow:0 10px 20px -18px rgba(0,0,0,.9),0 1px 0 rgba(255,255,255,.08) inset}
+  .pill{box-shadow:0 1px 0 rgba(255,255,255,.08) inset}
+  html[data-theme="pearl"] .card::before,html[data-theme="sky"] .card::before{
+    background:linear-gradient(180deg,rgba(255,255,255,.9),transparent)}
+  /* Kumpulan tetapan */
+  .grp{border:1px solid var(--line);border-radius:16px;margin-bottom:12px;overflow:hidden;
+    background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.012));
+    box-shadow:0 14px 26px -22px rgba(0,0,0,.9)}
+  .grp > summary{list-style:none;cursor:pointer;padding:13px 15px;font-size:12px;font-weight:800;
+    letter-spacing:.6px;text-transform:uppercase;color:var(--gold);display:flex;
+    justify-content:space-between;align-items:center}
+  .grp > summary::-webkit-details-marker{display:none}
+  .grp > summary::after{content:"▾";transition:transform .2s;font-size:14px}
+  .grp[open] > summary::after{transform:rotate(180deg)}
+  .grp-body{padding:2px 14px 14px}
+  .grp-body .switch:last-child,.grp-body .fld:last-child{margin-bottom:0}
+  #trans-box h3{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+  #trans-box{margin-top:16px}
+  #trans-box .trans{margin-top:0;padding-top:0;border-top:none}
 </style>
+
 </head>
 <body>
 <div class="wrap">
@@ -216,7 +256,13 @@
       <span><b class="tj-qal">قْ</b> Qalqalah</span>
     </div>
   </div>
+
+  <div class="card" id="trans-box" hidden>
+    <h3>Terjemahan Bahasa Melayu</h3>
+    <div id="trans-slot"></div>
+  </div>
 </div>
+
 
 <div class="dock"><div class="dock-in">
   <button class="btn" id="prev">‹ Ayat</button>
@@ -235,80 +281,108 @@
     <h2>Tetapan</h2>
     <p class="sub">Tetapan disimpan berasingan untuk setiap pengguna pada peranti ini.</p>
 
-    <div class="fld">
-      <label>Nama pengguna (profil)</label>
-      <div class="row">
-        <input type="text" id="set-profile" placeholder="cth: Ahmad" />
-        <button class="btn" id="switch-profile">Tukar</button>
+    <details class="grp" open>
+      <summary>Profil &amp; Rupa</summary>
+      <div class="grp-body">
+        <div class="fld">
+          <label>Nama pengguna (profil)</label>
+          <div class="row">
+            <input type="text" id="set-profile" placeholder="cth: Ahmad" />
+            <button class="btn" id="switch-profile">Tukar</button>
+          </div>
+        </div>
+        <div class="fld">
+          <label>Templet warna aplikasi</label>
+          <select id="set-theme">
+            <option value="emerald">Gelap — Zamrud &amp; Emas</option>
+            <option value="midnight">Gelap — Biru Malam</option>
+            <option value="ink">Gelap — Arang &amp; Emas</option>
+            <option value="pearl">Cerah — Mutiara Hangat</option>
+            <option value="sky">Cerah — Biru Lembut</option>
+          </select>
+        </div>
+        <div class="fld">
+          <label>Saiz teks Al-Quran: <b id="size-val">32</b> px</label>
+          <input type="range" id="set-size" min="20" max="64" step="2" />
+        </div>
+        <div class="switch"><span>Paparkan teks ayat</span><div class="tg" id="tg-showtext"></div></div>
+        <div class="switch"><span>Warna hukum tajwid</span><div class="tg" id="tg-tajwid"></div></div>
+        <div class="switch"><span>Kekalkan skrin menyala semasa membaca</span><div class="tg" id="tg-keepawake"></div></div>
       </div>
-    </div>
+    </details>
 
-    <div class="fld">
-      <label>Templet warna aplikasi</label>
-      <select id="set-theme">
-        <option value="emerald">Gelap — Zamrud &amp; Emas</option>
-        <option value="midnight">Gelap — Biru Malam</option>
-        <option value="ink">Gelap — Arang &amp; Emas</option>
-        <option value="pearl">Cerah — Mutiara Hangat</option>
-        <option value="sky">Cerah — Biru Lembut</option>
-      </select>
-    </div>
+    <details class="grp" open>
+      <summary>Semakan Bacaan</summary>
+      <div class="grp-body">
+        <div class="switch"><span>Wajib betul sebelum teruskan</span><div class="tg" id="tg-mustcorrect"></div></div>
+        <div class="switch"><span>Wajib ulang perkataan salah sehingga betul (mod latih tubi)</span><div class="tg" id="tg-drill"></div></div>
+        <div class="switch"><span>Mainkan bacaan betul bila salah</span><div class="tg" id="tg-autofix"></div></div>
+        <div class="switch"><span>Guru tegas (bip bila salah)</span><div class="tg" id="tg-strict"></div></div>
+        <div class="switch"><span>Auto buka mikrofon selepas app habis bercakap</span><div class="tg" id="tg-automic"></div></div>
+        <div class="fld">
+          <label>Ketegasan semakan (toleransi sebutan): <b id="tol-val">72</b>%</label>
+          <input type="range" id="set-tol" min="50" max="95" step="1" />
+        </div>
+      </div>
+    </details>
 
-    <div class="switch"><span>Warna hukum tajwid</span><div class="tg" id="tg-tajwid"></div></div>
-    <div class="switch"><span>Auto buka mikrofon selepas app habis bercakap</span><div class="tg" id="tg-automic"></div></div>
-    <div class="switch"><span>Wajib betul sebelum teruskan</span><div class="tg" id="tg-mustcorrect"></div></div>
-    <div class="switch"><span>Paparkan teks ayat</span><div class="tg" id="tg-showtext"></div></div>
-    <div class="switch"><span>Paparkan terjemahan</span><div class="tg" id="tg-showtrans"></div></div>
-    <div class="switch"><span>Auto baca terjemahan (BM)</span><div class="tg" id="tg-speaktrans"></div></div>
-    <div class="switch"><span>Mod hafazan</span><div class="tg" id="tg-hafazan"></div></div>
-    <div class="switch"><span>Guru tegas (bip bila salah)</span><div class="tg" id="tg-strict"></div></div>
+    <details class="grp">
+      <summary>Terjemahan</summary>
+      <div class="grp-body">
+        <div class="switch"><span>Paparkan terjemahan</span><div class="tg" id="tg-showtrans"></div></div>
+        <div class="fld">
+          <label>Kedudukan terjemahan</label>
+          <select id="set-transpos">
+            <option value="ayat">Di bawah setiap ayat Al-Quran</option>
+            <option value="bawah">Di bahagian bawah sekali</option>
+          </select>
+        </div>
+        <div class="switch"><span>Auto baca terjemahan (selepas semua bacaan betul)</span><div class="tg" id="tg-speaktrans"></div></div>
+        <div class="fld">
+          <label>Saiz teks terjemahan: <b id="tsize-val">15</b> px</label>
+          <input type="range" id="set-tsize" min="12" max="30" step="1" />
+        </div>
+        <div class="fld">
+          <label>Kelajuan suara terjemahan: <b id="rate-val">1.0</b>×</label>
+          <input type="range" id="set-rate" min="0.6" max="1.4" step="0.1" />
+        </div>
+        <div class="fld">
+          <label>Suara Bahasa Melayu</label>
+          <select id="set-voice"></select>
+        </div>
+      </div>
+    </details>
 
-    <div class="fld">
-      <label>Bilangan ulangan setiap ayat (mod hafazan): <b id="rep-val">3</b></label>
-      <input type="range" id="set-repeat" min="1" max="10" step="1" />
-    </div>
+    <details class="grp">
+      <summary>Hafazan</summary>
+      <div class="grp-body">
+        <div class="switch"><span>Mod hafazan</span><div class="tg" id="tg-hafazan"></div></div>
+        <div class="fld">
+          <label>Bilangan ulangan setiap ayat: <b id="rep-val">3</b></label>
+          <input type="range" id="set-repeat" min="1" max="10" step="1" />
+        </div>
+      </div>
+    </details>
 
-    <div class="fld">
-      <label>Saiz teks Al-Quran: <b id="size-val">32</b> px</label>
-      <input type="range" id="set-size" min="20" max="64" step="2" />
-    </div>
-
-    <div class="fld">
-      <label>Saiz teks terjemahan: <b id="tsize-val">15</b> px</label>
-      <input type="range" id="set-tsize" min="12" max="30" step="1" />
-    </div>
-
-    <div class="fld">
-      <label>Kelajuan suara terjemahan: <b id="rate-val">1.0</b>×</label>
-      <input type="range" id="set-rate" min="0.6" max="1.4" step="0.1" />
-    </div>
-
-    <div class="fld">
-      <label>Ketegasan semakan (toleransi sebutan): <b id="tol-val">72</b>%</label>
-      <input type="range" id="set-tol" min="50" max="95" step="1" />
-    </div>
-
-    <div class="fld">
-      <label>Suara Bahasa Melayu</label>
-      <select id="set-voice"></select>
-    </div>
-
-    <div class="fld">
-      <label>Qari (rakaman bacaan sebenar)</label>
-      <select id="set-qari"></select>
-    </div>
-
-    <div class="fld">
-      <label>Kelajuan bacaan qari — <b id="arate-val"></b>×</label>
-      <input type="range" id="set-arate" min="0.5" max="1.5" step="0.1" />
-    </div>
-
-    <div class="switch"><span>Mainkan bacaan betul bila salah</span><div class="tg" id="tg-autofix"></div></div>
-    <div class="switch"><span>Mainkan bacaan qari setiap kali buka ayat</span><div class="tg" id="tg-autoplay"></div></div>
+    <details class="grp">
+      <summary>Bacaan Qari</summary>
+      <div class="grp-body">
+        <div class="fld">
+          <label>Qari (rakaman bacaan sebenar)</label>
+          <select id="set-qari"></select>
+        </div>
+        <div class="fld">
+          <label>Kelajuan bacaan qari — <b id="arate-val"></b>×</label>
+          <input type="range" id="set-arate" min="0.5" max="1.5" step="0.1" />
+        </div>
+        <div class="switch"><span>Mainkan bacaan qari setiap kali buka ayat</span><div class="tg" id="tg-autoplay"></div></div>
+      </div>
+    </details>
 
     <button class="btn-gold" id="close-set">Simpan &amp; Tutup</button>
   </div>
 </div>
+
 
 <!-- ============ PENANDA (BOOKMARK) ============ -->
 <div class="sheet" id="bm-sheet">
@@ -508,7 +582,9 @@ const DEFAULTS = {
   showText:true, showTrans:true, speakTrans:true, hafazan:false, strict:true,
   repeat:3, size:32, tsize:15, rate:1, tol:72, voice:"",
   qari:"ar.alafasy", arate:1, autoFix:true, autoPlay:false,
-  theme:"emerald", tajwid:true, autoMic:true, mustCorrect:true, transDelay:1000
+  theme:"emerald", tajwid:true, autoMic:true, mustCorrect:true, transDelay:1000, keepAwake:true,
+  drill:true, transPos:"ayat"
+
 };
 let profile = LS.get("tasmi.profile","Pengguna");
 let S = { ...DEFAULTS };
@@ -750,6 +826,7 @@ let surahList = SURAH_FALLBACK; // senarai penuh 114 surah, sentiasa lengkap
 let current = null;       // {n,name,ayat:[],ms:[]}
 let aIdx=0, cursor=0, marks=[], listening=false, repDone=0, busy=false;
 let watchdog=null;
+let drillWord=-1, drillAt=0;
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 function setStatus(t){ $("status").textContent = t; }
@@ -763,9 +840,18 @@ function applySettings(){
   $("trans").style.fontSize = S.tsize+"px";
   $("ayah-text").classList.toggle("hidden-text", !S.showText);
   $("trans").hidden = !S.showTrans;
+  // Kedudukan terjemahan: bawah setiap ayat, atau di bahagian bawah sekali
+  const bottom = (S.transPos === "bawah");
+  const host = bottom ? $("trans-slot") : $("ayah-text").parentNode;
+  if($("trans").parentNode !== host){
+    if(bottom) host.appendChild($("trans"));
+    else host.insertBefore($("trans"), $("ayah-text").nextSibling);
+  }
+  $("trans-box").hidden = !(bottom && S.showTrans);
   $("profile-label").textContent = profile + " · semakan bacaan";
   $("rep-badge").hidden = !S.hafazan;
 }
+
 
 function fillSurahSelect(){
   $("surah").innerHTML = surahList.map(s=>`<option value="${s.n}">${s.n}. ${s.name}</option>`).join("");
@@ -799,16 +885,18 @@ function renderTrans(hi=-1){
 }
 
 function loadAyah(i,resetRep=true){
+  if(!current) return;
   stopAudio();
-  aIdx = Math.max(0, Math.min(i, current.ayat.length-1));
-  cursor=0; if(resetRep) repDone=0;
+  aIdx = Math.max(0, Math.min(+i || 0, current.ayat.length-1));
+  cursor=0; if(resetRep) repDone=0; drillWord=-1; drillAt=0;
   marks = new Array(currentAyah().split(/\s+/).filter(Boolean).length).fill(null);
   $("ayah").value = aIdx;
+  $("surah").value = current.n;
   render();
-  if(current) LS.set("tasmi.resume."+profile, { s: current.n, a: aIdx, t: Date.now() });
+  saveResume();
   if(S.autoPlay) setTimeout(()=>playAyah(aIdx), 250);
 }
-function resetAyah(){ cursor=0; marks=marks.map(()=>null); render(); }
+function resetAyah(){ cursor=0; marks=marks.map(()=>null); drillWord=-1; drillAt=0; render(); }
 
 function nextAyah(){
   if(aIdx+1 < current.ayat.length) loadAyah(aIdx+1);
@@ -829,10 +917,19 @@ async function loadSurahList(){
   fillSurahSelect();
 }
 
-async function loadSurah(n){
+let loadSeq = 0;
+async function loadSurah(n, targetAyah = 0){
+  n = +n;
+  const seq = ++loadSeq;
   busy = true; setStatus("Memuatkan surah…");
+  $("surah").value = n;   // paparan pilihan sentiasa ikut pilihan pengguna
   const cacheKey = "tasmi.surah."+n;
   let data = LS.get(cacheKey,null);
+  // buang cache rosak / tidak sepadan (kiraan ayat salah atau nombor surah salah)
+  const meta = SURAH_META.find(m=>m[0]===n);
+  if(data && (+data.n !== n || !Array.isArray(data.ayat) || (meta && data.ayat.length !== meta[3]))){
+    data = null; try{ localStorage.removeItem(cacheKey); }catch(e){}
+  }
   if(!data){
     try{
       const r = await fetch(`${API}/surah/${n}/editions/quran-uthmani,ms.basmeih`);
@@ -846,15 +943,17 @@ async function loadSurah(n){
     }catch(e){
       const off = OFFLINE[n];
       if(off) data = { n, name: off.name, ayat: off.ayat, ms: off.ms };
-      else { setStatus("Tiada internet — surah ini belum dimuat turun. Sila pilih surah lain."); busy=false; return; }
+      else { if(seq===loadSeq){ setStatus("Tiada internet — surah ini belum dimuat turun. Sila pilih surah lain."); busy=false; } return; }
     }
   }
+  if(seq !== loadSeq) return;          // pilihan lain telah dibuat — abaikan hasil lama
+  if(!data || +data.n !== n) data = { ...data, n };
   current = data;
   ensureBismillah(current);
   $("surah").value = n;
   LS.set("tasmi.last."+profile, n);
   fillAyahSelect();
-  loadAyah(0);
+  loadAyah(Math.max(0, Math.min(+targetAyah || 0, current.ayat.length - 1)));
   setStatus((n!==1 && n!==9)
     ? "Mulakan dengan Bismillah — ia termasuk dalam semakan ayat pertama."
     : "Tekan mikrofon dan mula membaca.");
@@ -958,6 +1057,29 @@ function processSpoken(text, isFinal){
     const spoken = sw[si];
     const judge = isFinal || si < sw.length-1;   // perkataan terakhir interim belum stabil
     if(cursor >= target.length) break;
+
+    // MOD LATIH TUBI: perkataan sedang dibetulkan — wajib baca semula perkataan itu sahaja
+    if(S.drill && marks[cursor]==="bad"){
+      if(similar(spoken, target[cursor]) >= TOL()){
+        marks[cursor]="ok"; cursor++; drillWord=-1;
+        if(S.strict) beep("ok");
+        setStatus("Bagus! Perkataan itu sudah betul. Teruskan bacaan.");
+        continue;
+      }
+      if(!judge) continue;
+      const bad = cursor;
+      render();
+      const now = Date.now();
+      if(S.autoFix && now - drillAt > 2200){
+        drillAt = now; drillWord = bad;
+        setStatus("Belum tepat lagi. Dengar bacaan yang betul, kemudian ulang perkataan merah itu.");
+        setTimeout(()=>playWord(bad), 300);
+        return;
+      }
+      setStatus("Belum tepat lagi. Sila ulang perkataan merah itu sehingga betul.");
+      continue;                            // jangan maju selagi belum betul
+    }
+
     if(similar(spoken, target[cursor]) >= TOL()){
       marks[cursor]="ok"; cursor++; continue;
     }
@@ -983,13 +1105,14 @@ function processSpoken(text, isFinal){
     if(marks[cursor] !== "bad"){
       marks[cursor]="bad";
       if(S.strict){ beep("err"); }
-      setStatus(S.mustCorrect
+      setStatus((S.drill || S.mustCorrect)
         ? "Bacaan belum tepat. Sila ulang perkataan merah ini sehingga betul sebelum diteruskan."
         : "Bacaan tidak tepat. Tekan pada perkataan merah untuk mendengar bacaan yang betul.");
-      if(S.autoFix){ const bad=cursor; render(); setTimeout(()=>playWord(bad), 350); return; }
+      if(S.autoFix){ const bad=cursor; drillWord=bad; drillAt=Date.now(); render(); setTimeout(()=>playWord(bad), 350); return; }
     }
-    if(!S.mustCorrect){ cursor++; }      // benarkan teruskan bila tetapan dimatikan
+    if(!S.mustCorrect && !S.drill){ cursor++; }   // benarkan teruskan bila tetapan dimatikan
   }
+
   render();
   if(cursor >= target.length && marks.length && marks.every(m=>m==="ok")) ayahComplete();
 }
@@ -1086,7 +1209,7 @@ $("mic").onclick = ()=>{
   if(listening){ micAuto=false; stopRec(); } else { micAuto=false; startRec(); }
 };
 $("skip").onclick = ()=>{
-  if(S.mustCorrect && marks.some(m=>m==="bad")){
+  if((S.mustCorrect || S.drill) && marks.some(m=>m==="bad")){
     setStatus("Tetapan 'Wajib betul sebelum teruskan' aktif — sila betulkan perkataan merah dahulu.");
     beep("err"); return;
   }
@@ -1104,8 +1227,12 @@ $("ayah-text").addEventListener("click", (e)=>{
   playWord(i);            // satu klik = dengar perkataan itu sahaja
 });
 $("ayah-text").addEventListener("dblclick", ()=> playAyah(aIdx));   // klik dua kali = dengar seluruh ayat
-$("surah").onchange = e => loadSurah(+e.target.value);
-$("ayah").onchange = e => loadAyah(+e.target.value);
+$("surah").onchange = e => loadSurah(+e.target.value, 0);
+$("ayah").onchange = e => {
+  const want = +e.target.value;
+  if(busy){ e.target.value = aIdx; setStatus("Sedang memuatkan surah… cuba sekejap lagi."); return; }
+  loadAyah(want);
+};
 
 /* Tetapan */
 function bindToggle(id,key,after){
@@ -1128,6 +1255,11 @@ function initSettingsUI(){
   bindToggle("tg-tajwid","tajwid");
   bindToggle("tg-automic","autoMic");
   bindToggle("tg-mustcorrect","mustCorrect");
+  bindToggle("tg-drill","drill");
+  $("set-transpos").value = S.transPos || "ayat";
+  $("set-transpos").onchange = e => { S.transPos = e.target.value; saveSettings(); applySettings(); render(); };
+
+  bindToggle("tg-keepawake","keepAwake", ()=> syncWakeLock());
   bindToggle("tg-showtext","showText");
   bindToggle("tg-showtrans","showTrans");
   bindToggle("tg-speaktrans","speakTrans");
@@ -1205,13 +1337,58 @@ $("bm-list").addEventListener("click", async (e)=>{
   if(go){
     const [s,a] = go.split(":").map(Number);
     $("bm-sheet").classList.remove("open");
-    if(!current || current.n !== s) await loadSurah(s);
-    loadAyah(a);
+    if(!current || +current.n !== +s) await loadSurah(s, a);
+    else loadAyah(a);
   } else if(del){
     const [s,a] = del.split(":").map(Number);
     removeBookmark(s,a);
   }
 });
+
+/* ============ 9b. SKRIN SENTIASA MENYALA + INGAT LOKASI ============ */
+function saveResume(){
+  if(!current) return;
+  LS.set("tasmi.resume."+profile, { s: current.n, a: aIdx, t: Date.now() });
+  LS.set("tasmi.last."+profile, current.n);
+}
+
+let _wl = null, _wlVideo = null;
+async function acquireWakeLock(){
+  try{
+    if("wakeLock" in navigator && !_wl){
+      _wl = await navigator.wakeLock.request("screen");
+      _wl.addEventListener("release", ()=>{ _wl = null; });
+      return true;
+    }
+  }catch(e){}
+  return !!_wl;
+}
+function releaseWakeLock(){ try{ _wl && _wl.release(); }catch(e){} _wl = null; stopWakeVideo(); }
+function startWakeVideo(){
+  if(_wlVideo) { _wlVideo.play().catch(()=>{}); return; }
+  const v = document.createElement("video");
+  v.setAttribute("playsinline",""); v.muted = true; v.loop = true;
+  v.style.cssText = "position:fixed;width:1px;height:1px;opacity:0.01;pointer-events:none;bottom:0;left:0";
+  // klip video kosong sangat kecil (base64 mp4)
+  v.src = "data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAr1tZGF0AAACrgYF//+q3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE1NSAtIEguMjY0L01QRUctNCBBVkMgY29kZWMgLSBDb3B5bGVmdCAyMDAzLTIwMTgAAAAA";
+  document.body.appendChild(v);
+  _wlVideo = v; v.play().catch(()=>{});
+}
+function stopWakeVideo(){ if(_wlVideo){ try{ _wlVideo.pause(); }catch(e){} _wlVideo.remove(); _wlVideo=null; } }
+async function syncWakeLock(){
+  if(S.keepAwake && document.visibilityState === "visible"){
+    const ok = await acquireWakeLock();
+    if(!ok) startWakeVideo();
+  } else {
+    releaseWakeLock();
+  }
+}
+document.addEventListener("visibilitychange", ()=>{
+  if(document.visibilityState === "visible") syncWakeLock();
+  else { saveResume(); releaseWakeLock(); }
+});
+window.addEventListener("pagehide", saveResume);
+document.addEventListener("click", ()=>{ if(S.keepAwake && !_wl) syncWakeLock(); }, { passive:true });
 
 /* ============ 10. BOOT ============ */
 async function boot(){
@@ -1221,13 +1398,13 @@ async function boot(){
   // Sambung semula bacaan terakhir (surah + ayat) dari memori telefon
   const rz = LS.get("tasmi.resume."+profile, null);
   const startS = (rz && rz.s) || LS.get("tasmi.last."+profile, 1) || 1;
-  await loadSurah(startS);
-  if(rz && rz.s === startS && rz.a > 0){
-    loadAyah(rz.a);
+  await loadSurah(startS, (rz && rz.s === startS) ? (rz.a || 0) : 0);
+  if(rz && rz.s === startS && (rz.a > 0 || rz.t)){
     setStatus(`Disambung semula: ${surahName(startS)} · Ayat ${rz.a+1}.`);
   }
   renderBookmarks();
   loadSurahList();
+  syncWakeLock();
 }
 boot();
 
