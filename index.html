@@ -124,6 +124,8 @@
     </div>
     <div class="hdr-right">
       <span class="pill" id="state">Sedia</span>
+      <button class="icon-btn" id="bm-add" aria-label="Simpan penanda">🔖</button>
+      <button class="icon-btn" id="bm-open" aria-label="Senarai penanda">📑</button>
       <button class="icon-btn" id="open-set" aria-label="Tetapan">⚙</button>
     </div>
   </header>
@@ -144,7 +146,7 @@
 
     <div class="trans" id="trans" hidden></div>
 
-    <p class="hint">Tekan mana-mana perkataan pada ayat untuk mendengar bacaan yang betul daripada rakaman qari.</p>
+    <p class="hint">Tekan satu perkataan untuk dengar bacaan betul perkataan itu. Klik dua kali untuk dengar seluruh ayat.</p>
     <div class="heard" id="heard"></div>
     <div class="status" id="status">Tekan mikrofon sekali dan mula membaca. Guru akan menyemak setiap perkataan.</div>
 
@@ -232,6 +234,16 @@
     <div class="switch"><span>Mainkan bacaan qari setiap kali buka ayat</span><div class="tg" id="tg-autoplay"></div></div>
 
     <button class="btn-gold" id="close-set">Simpan &amp; Tutup</button>
+  </div>
+</div>
+
+<!-- ============ PENANDA (BOOKMARK) ============ -->
+<div class="sheet" id="bm-sheet">
+  <div class="sheet-in">
+    <h2>Penanda Bacaan</h2>
+    <p class="sub">Disimpan terus dalam memori telefon anda (luar talian), mengikut profil pengguna.</p>
+    <div id="bm-list"></div>
+    <button class="btn-gold" id="bm-close">Tutup</button>
   </div>
 </div>
 
@@ -529,6 +541,43 @@ function toggleListenAyah(){
   else playAyah(aIdx);
 }
 
+/* ---- Audio PERKATAAN demi PERKATAAN (word-by-word) ---- */
+const BISMILLAH = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ";
+const hasArabic = t => /[\u0621-\u064A]/.test(stripD(t));
+/* nombor perkataan mengikut penomboran quran.com (tanda waqaf tidak dikira) */
+function wordAudioUrl(ayahIdx, tokenIdx){
+  const toks = (current.ayat[ayahIdx]||"").split(/\s+/).filter(Boolean);
+  let no = 0;
+  for(let i=0;i<=tokenIdx && i<toks.length;i++){ if(hasArabic(toks[i])) no++; }
+  if(no === 0) return null;
+  let sur = current.n, ay = ayahIdx+1, w = no;
+  // Bismillah pada ayat pertama surah (kecuali Al-Fatihah & At-Taubah) bukan sebahagian ayat 1 di quran.com
+  if(ayahIdx === 0 && sur !== 1 && sur !== 9){
+    if(w <= 4){ sur = 1; ay = 1; }   // ambil terus daripada Al-Fatihah ayat 1
+    else w -= 4;
+  }
+  const p3 = n => String(n).padStart(3,"0");
+  return `https://audio.qurancdn.com/wbw/${p3(sur)}_${p3(ay)}_${p3(w)}.mp3`;
+}
+/* Mainkan bacaan betul bagi SATU perkataan; jika gagal, main keseluruhan ayat */
+function playWord(tokenIdx, ayahIdx){
+  const idx = (typeof ayahIdx === "number") ? ayahIdx : aIdx;
+  const url = wordAudioUrl(idx, tokenIdx);
+  if(!url){ playAyah(idx); return; }
+  if(listening) stopRec();
+  stopAudio();
+  const a = new Audio(url);
+  a.preload = "auto";
+  a.playbackRate = S.arate || 1;
+  a.onerror = ()=>{ if(player===a){ player=null; playAyah(idx); } };
+  a.onended = ()=> stopAudio();
+  player = a; playingIdx = idx;
+  const btn = $("listen"); if(btn) btn.textContent = "■ Henti";
+  const tok = (current.ayat[idx]||"").split(/\s+/).filter(Boolean)[tokenIdx] || "";
+  setStatus(`Bacaan betul bagi perkataan: ${tok}`);
+  a.play().catch(()=>{});
+}
+
 /* ============ 5. STATE & UI ============ */
 const $ = id => document.getElementById(id);
 let surahList = SURAH_FALLBACK; // senarai penuh 114 surah, sentiasa lengkap
@@ -583,6 +632,7 @@ function loadAyah(i,resetRep=true){
   marks = new Array(currentAyah().split(/\s+/).filter(Boolean).length).fill(null);
   $("ayah").value = aIdx;
   render();
+  if(current) LS.set("tasmi.resume."+profile, { s: current.n, a: aIdx, t: Date.now() });
   if(S.autoPlay) setTimeout(()=>playAyah(aIdx), 250);
 }
 function resetAyah(){ cursor=0; marks=marks.map(()=>null); render(); }
@@ -627,12 +677,24 @@ async function loadSurah(n){
     }
   }
   current = data;
+  ensureBismillah(current);
   $("surah").value = n;
   LS.set("tasmi.last."+profile, n);
   fillAyahSelect();
   loadAyah(0);
-  setStatus("Tekan mikrofon dan mula membaca.");
+  setStatus((n!==1 && n!==9)
+    ? "Mulakan dengan Bismillah — ia termasuk dalam semakan ayat pertama."
+    : "Tekan mikrofon dan mula membaca.");
   busy = false;
+}
+
+/* Pastikan Bismillah tidak tertinggal pada ayat pertama (kecuali Al-Fatihah & At-Taubah) */
+function ensureBismillah(d){
+  if(!d || !d.ayat || !d.ayat.length) return;
+  if(d.n === 1 || d.n === 9) return;
+  const first = stripD(d.ayat[0] || "");
+  if(first.startsWith(stripD(BISMILLAH))) return;
+  d.ayat[0] = BISMILLAH + " " + d.ayat[0];
 }
 
 /* ============ 7. TERJEMAHAN AUTO (TTS Bahasa Melayu) ============ */
@@ -707,7 +769,11 @@ function ayahComplete(){
   speakTranslation(()=>setTimeout(nextAyah, 700));
 }
 
-function processSpoken(text){
+/* Semakan perkataan demi perkataan.
+   isFinal=false (interim) → hanya tandakan yang BETUL supaya semakan nampak serta-merta.
+   isFinal=true → tandakan juga yang salah. */
+function processSpoken(text, isFinal){
+  if(!current) return;
   $("heard").textContent = text;
   const target = currentAyah().split(/\s+/).filter(Boolean).map(stripD);
   const sw = words(text);
@@ -715,12 +781,27 @@ function processSpoken(text){
   for(const spoken of sw){
     if(cursor >= target.length) break;
     if(similar(spoken, target[cursor]) >= TOL()){
-      marks[cursor]="ok"; cursor++;
-    } else if(marks[cursor] !== "bad"){
+      marks[cursor]="ok"; cursor++; continue;
+    }
+    // cuba padan dengan 1–2 perkataan berikutnya (kadang pengecaman gabung/lompat)
+    let jumped = false;
+    for(let k=1;k<=2 && cursor+k<target.length;k++){
+      if(similar(spoken, target[cursor+k]) >= TOL()){
+        for(let j=0;j<k;j++){ if(marks[cursor+j]!=="ok") marks[cursor+j]="ok"; }
+        marks[cursor+k]="ok"; cursor+=k+1; jumped=true; break;
+      }
+    }
+    if(jumped) continue;
+    // gabungan dua perkataan target (cth. dibaca bersambung)
+    if(cursor+1 < target.length && similar(spoken, target[cursor]+target[cursor+1]) >= TOL()){
+      marks[cursor]="ok"; marks[cursor+1]="ok"; cursor+=2; continue;
+    }
+    if(!isFinal) continue;               // jangan hukum semasa masih bercakap
+    if(marks[cursor] !== "bad"){
       marks[cursor]="bad";
       if(S.strict){ beep("err"); }
       setStatus("Bacaan tidak tepat. Tekan pada perkataan merah untuk mendengar bacaan yang betul.");
-      if(S.autoFix){ render(); setTimeout(()=>playAyah(aIdx), 350); return; }
+      if(S.autoFix){ const bad=cursor; render(); setTimeout(()=>playWord(bad), 350); return; }
     }
   }
   render();
@@ -729,7 +810,7 @@ function processSpoken(text){
 
 async function startMeter(){
   try{
-    mediaStream = await navigator.mediaDevices.getUserMedia({audio:true});
+    if(!mediaStream) mediaStream = await navigator.mediaDevices.getUserMedia({audio:true});
     actx = actx || new (window.AudioContext||window.webkitAudioContext)();
     const src = actx.createMediaStreamSource(mediaStream);
     const an = actx.createAnalyser(); an.fftSize=512; src.connect(an);
@@ -750,27 +831,52 @@ function stopMeter(){
   if(mediaStream){ mediaStream.getTracks().forEach(t=>t.stop()); mediaStream=null; }
 }
 
-function startRec(){
-  if(!SR){ setStatus("Pelayar ini tidak menyokong pengecaman suara. Sila guna Chrome atau Edge."); return; }
+async function startRec(){
+  if(!SR){ setStatus("Pelayar ini tidak menyokong pengecaman suara. Sila guna Chrome (Android/desktop) atau Safari 16+."); return; }
+  // Minta kebenaran mikrofon dahulu supaya ralat jelas kepada pengguna
+  try{
+    if(!mediaStream) mediaStream = await navigator.mediaDevices.getUserMedia({audio:true});
+  }catch(e){
+    setStatus("Mikrofon tidak dibenarkan. Benarkan akses mikrofon, atau buka aplikasi dalam tab penuh.");
+    return;
+  }
+  listening = true;
   rec = new SR();
-  rec.lang="ar-SA"; rec.continuous=true; rec.interimResults=true; rec.maxAlternatives=3;
-  let lastFinal="";
+  rec.lang="ar-SA"; rec.continuous=true; rec.interimResults=true; rec.maxAlternatives=1;
+  const seen = {};              // bilangan perkataan yang sudah disemak bagi setiap segmen
   rec.onstart=()=>{
     listening=true;
     $("mic").classList.add("on"); $("mic-wrap").classList.add("on");
     $("state").textContent="Mendengar…"; $("state").classList.add("live");
     setStatus("Sedang mendengar bacaan anda…");
   };
-  rec.onerror=(e)=>{ if(e.error!=="no-speech") setStatus("Ralat mikrofon: "+e.error); };
-  rec.onend=()=>{ if(listening){ try{rec.start();}catch(e){} } else stopUI(); };
+  rec.onerror=(e)=>{
+    if(e.error==="no-speech" || e.error==="aborted") return;
+    if(e.error==="not-allowed" || e.error==="service-not-allowed"){
+      listening=false; stopUI();
+      setStatus("Pengecaman suara disekat. Buka aplikasi dalam tab penuh dan benarkan mikrofon.");
+      return;
+    }
+    setStatus("Ralat mikrofon: "+e.error);
+  };
+  rec.onend=()=>{ if(listening){ setTimeout(()=>{ try{ rec.start(); }catch(e){} }, 250); } else stopUI(); };
   rec.onresult=(ev)=>{
     for(let i=ev.resultIndex;i<ev.results.length;i++){
-      const r=ev.results[i], txt=r[0].transcript.trim();
-      if(r.isFinal){ if(txt && txt!==lastFinal){ lastFinal=txt; processSpoken(txt); } }
-      else $("heard").textContent = txt;
+      const r=ev.results[i], txt=(r[0].transcript||"").trim();
+      if(!txt) continue;
+      const w = words(txt);
+      const done = seen[i] || 0;
+      const fresh = r.isFinal ? w.slice(done) : w.slice(done, Math.max(done, w.length-1)); // interim: abaikan perkataan terakhir (belum stabil)
+      if(fresh.length){
+        seen[i] = done + fresh.length;
+        processSpoken(fresh.join(" "), !!r.isFinal);
+      } else {
+        $("heard").textContent = txt;
+      }
+      if(r.isFinal) seen[i] = w.length;
     }
   };
-  try{ rec.start(); }catch(e){}
+  try{ rec.start(); }catch(e){ try{ rec.stop(); }catch(_){} }
   startMeter();
 }
 function stopUI(){
@@ -798,8 +904,9 @@ $("ayah-text").addEventListener("click", (e)=>{
   const i = +el.dataset.i;
   document.querySelectorAll(".w.play").forEach(x=>x.classList.remove("play"));
   el.classList.add("play");
-  playAyah(aIdx);
+  playWord(i);            // satu klik = dengar perkataan itu sahaja
 });
+$("ayah-text").addEventListener("dblclick", ()=> playAyah(aIdx));   // klik dua kali = dengar seluruh ayat
 $("surah").onchange = e => loadSurah(+e.target.value);
 $("ayah").onchange = e => loadAyah(+e.target.value);
 
@@ -846,6 +953,7 @@ $("switch-profile").onclick = ()=>{
   if(!name) return;
   profile = name; loadSettings(); saveSettings();
   initSettingsUI(); applySettings(); render();
+  renderBookmarks();
   setStatus(`Tetapan untuk ${profile} dimuatkan.`);
 };
 
@@ -854,12 +962,69 @@ if(window.speechSynthesis){
   speechSynthesis.onvoiceschanged = loadVoices;
 }
 
+/* ============ 9b. PENANDA (BOOKMARK) — simpan dalam memori telefon ============ */
+function bmKey(){ return "tasmi.bookmarks."+profile.toLowerCase().trim(); }
+function getBookmarks(){ return LS.get(bmKey(), []); }
+function setBookmarks(list){ LS.set(bmKey(), list); }
+function surahName(n){ const s = surahList.find(x=>x.n===n); return s? s.name : ("Surah "+n); }
+function addBookmark(){
+  if(!current) return;
+  const list = getBookmarks();
+  if(list.some(b=>b.s===current.n && b.a===aIdx)){ setStatus("Penanda ini sudah disimpan."); return; }
+  list.unshift({ s: current.n, a: aIdx, t: Date.now() });
+  setBookmarks(list.slice(0,200));
+  renderBookmarks();
+  setStatus(`Penanda disimpan: ${surahName(current.n)} · Ayat ${aIdx+1}.`);
+}
+function removeBookmark(s,a){
+  setBookmarks(getBookmarks().filter(b=>!(b.s===s && b.a===a)));
+  renderBookmarks();
+}
+function renderBookmarks(){
+  const list = getBookmarks();
+  const el = $("bm-list");
+  if(!list.length){ el.innerHTML = `<p class="sub">Belum ada penanda. Tekan 🔖 untuk menyimpan ayat semasa.</p>`; return; }
+  el.innerHTML = list.map(b=>`
+    <div class="switch">
+      <span>${b.s}. ${surahName(b.s)} · Ayat ${b.a+1}</span>
+      <span>
+        <button class="btn" data-go="${b.s}:${b.a}">Buka</button>
+        <button class="btn" data-del="${b.s}:${b.a}">Padam</button>
+      </span>
+    </div>`).join("");
+}
+$("bm-add").onclick = addBookmark;
+$("bm-open").onclick = ()=>{ renderBookmarks(); $("bm-sheet").classList.add("open"); };
+$("bm-close").onclick = ()=> $("bm-sheet").classList.remove("open");
+$("bm-sheet").onclick = e => { if(e.target.id==="bm-sheet") $("bm-sheet").classList.remove("open"); };
+$("bm-list").addEventListener("click", async (e)=>{
+  const go = e.target.getAttribute && e.target.getAttribute("data-go");
+  const del = e.target.getAttribute && e.target.getAttribute("data-del");
+  if(go){
+    const [s,a] = go.split(":").map(Number);
+    $("bm-sheet").classList.remove("open");
+    if(!current || current.n !== s) await loadSurah(s);
+    loadAyah(a);
+  } else if(del){
+    const [s,a] = del.split(":").map(Number);
+    removeBookmark(s,a);
+  }
+});
+
 /* ============ 10. BOOT ============ */
 async function boot(){
   loadSettings();
   initSettingsUI();
   fillSurahSelect();
-  await loadSurah(LS.get("tasmi.last."+profile, 1) || 1);  // default: Al-Fatihah
+  // Sambung semula bacaan terakhir (surah + ayat) dari memori telefon
+  const rz = LS.get("tasmi.resume."+profile, null);
+  const startS = (rz && rz.s) || LS.get("tasmi.last."+profile, 1) || 1;
+  await loadSurah(startS);
+  if(rz && rz.s === startS && rz.a > 0){
+    loadAyah(rz.a);
+    setStatus(`Disambung semula: ${surahName(startS)} · Ayat ${rz.a+1}.`);
+  }
+  renderBookmarks();
   loadSurahList();
 }
 boot();
