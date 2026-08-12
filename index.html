@@ -12,9 +12,6 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Manrope:wght@400;600;800&display=swap" rel="stylesheet" />
 <style>
-  html,body{-webkit-text-size-adjust:100%;overscroll-behavior-y:contain}
-  button,.mic{-webkit-tap-highlight-color:transparent;touch-action:manipulation;-webkit-user-select:none;user-select:none}
-  body{padding-bottom:env(safe-area-inset-bottom);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
   :root{
     --bg:#0b1210; --panel:#111c19; --panel-2:#16241f;
     --line:rgba(255,255,255,.08);
@@ -112,15 +109,6 @@
   .w.cur{background:rgba(216,182,120,.16);box-shadow:inset 0 0 0 1px rgba(216,182,120,.45)}
   .w{cursor:pointer}
   .w.play{background:rgba(216,182,120,.32);box-shadow:inset 0 0 0 1px var(--gold);color:#fff5e0}
-  /* ===== MOD MUSHAF: ayat bersambung penuh seperti tulisan Al-Quran standard ===== */
-  .ayah.mushaf{word-spacing:.06em;line-height:2.2;text-align:center}
-  .ayah.mushaf .w{display:inline;padding:0;margin:0;border-radius:6px;box-shadow:none;background:none}
-  .ayah.mushaf .w.ok{background:none;box-shadow:none;color:var(--green,#2fbf71)}
-  .ayah.mushaf .w.bad{background:rgba(239,75,93,.16);box-shadow:none;color:#ff9aa5;border-radius:6px}
-  .ayah.mushaf .w.cur{background:rgba(216,182,120,.22);box-shadow:none;border-radius:6px}
-  .ayah.mushaf .w.play{background:rgba(216,182,120,.34);box-shadow:none;color:#fff5e0}
-  .ayah.mushaf .wu{display:inline;margin:0}
-  .ayah.mushaf .wt{display:none}
   .hint{margin-top:10px;font-size:12px;color:var(--muted)}
   @keyframes shake{25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
   .w.again{animation:blinkok .7s ease-in-out 2}
@@ -164,9 +152,6 @@
   .mic::after{content:"";position:absolute;inset:6px;border-radius:50%;
     background:linear-gradient(180deg,rgba(255,255,255,.28),rgba(255,255,255,0) 55%);pointer-events:none}
   .mic:active{transform:scale(.94) translateY(2px)}
-  .mic.freeze{filter:grayscale(1);opacity:.5;pointer-events:none;animation:none!important}
-  .mic-wrap.freeze::before{opacity:.25}
-  .mic-wrap.freeze .ring{animation:none!important;opacity:0}
   .mic.on{background:
       radial-gradient(circle at 34% 26%, rgba(255,255,255,.6), rgba(255,255,255,0) 46%),
       linear-gradient(160deg,#ff8a97 2%,#ef4b5d 34%,#a1152b 100%);color:#fff;
@@ -469,14 +454,6 @@
           <label>Saiz teks Al-Quran: <b id="size-val">32</b> px</label>
           <input type="range" id="set-size" min="20" max="64" step="2" />
         </div>
-        <div class="fld">
-          <label>Mod paparan ayat Al-Quran</label>
-          <select id="set-ayahview">
-            <option value="mushaf">Mushaf — ayat penuh bersambung (standard)</option>
-            <option value="kata">Perkataan — dipecahkan satu-satu</option>
-          </select>
-          <div class="hint">Kedua-dua mod menyemak bacaan perkataan demi perkataan seperti biasa.</div>
-        </div>
         <div class="switch"><span>Paparkan teks ayat</span><div class="tg" id="tg-showtext"></div></div>
         <div class="switch"><span>Warna hukum tajwid</span><div class="tg" id="tg-tajwid"></div></div>
         <div class="switch"><span>Kekalkan skrin menyala semasa membaca</span><div class="tg" id="tg-keepawake"></div></div>
@@ -563,7 +540,10 @@
       </div>
     </details>
 
+    <button class="btn" id="reset-set" type="button">Set semula kepada tetapan asal</button>
+    <div class="hint">Semua tetapan akan kembali kepada tetapan lalai aplikasi.</div>
     <button class="btn-gold" id="close-set">Simpan &amp; Tutup</button>
+
   </div>
 </div>
 
@@ -763,14 +743,15 @@ const LS = {
 
 /* ============ 2. TETAPAN PER-PENGGUNA ============ */
 const DEFAULTS = {
-  showText:true, showTrans:true, speakTrans:true, hafazan:false, strict:true,
-  repeat:3, size:32, tsize:15, rate:1, tol:72, voice:"",
+  showText:true, showTrans:true, speakTrans:false, hafazan:false, strict:true,
+  repeat:3, size:40, tsize:21, rate:1, tol:80, voice:"",
   qari:"ar.alafasy", arate:1, autoFix:true, autoPlay:false,
-  theme:"emerald", tajwid:true, autoMic:true, mustCorrect:true, transDelay:1000, keepAwake:true,
-  drill:true, ayahView:"kata", transPos:"ayat", freeFlow:false, wbw:false, hideHdr:true,
-  sfx:false, silent:true, dsp:true, dspMobile:false
+  theme:"sky", tajwid:true, autoMic:true, mustCorrect:true, transDelay:1000, keepAwake:true,
+  drill:false, transPos:"ayat", freeFlow:false, wbw:true, hideHdr:true,
+  sfx:false, dsp:false, dspMobile:true
 
 };
+
 let profile = LS.get("tasmi.profile","Pengguna");
 let S = { ...DEFAULTS };
 
@@ -844,9 +825,7 @@ const TOL = () => S.tol/100;
 /* ============ 4. BUNYI BIP ============ */
 let actx;
 function beep(type){
-  /* Bunyi "bib" isyarat dimatikan sepenuhnya (permintaan pengguna).
-     Ia hanya berbunyi jika pengguna menghidupkan semula tetapan bunyi. */
-  if(!S.sfx || S.silent !== false) return;
+  if(!S.sfx) return;                                        // bunyi isyarat dimatikan (lalai)
   if(typeof listening!=="undefined" && listening) return;   // senyap semasa mendengar
   try{
     actx = actx || new (window.AudioContext||window.webkitAudioContext)();
@@ -968,7 +947,7 @@ async function playAyah(i, opts){
     a.preload = "auto";
     a.playbackRate = S.arate || 1;
     a.onerror = ()=>{ if(player===a){ tryPlay(); } };
-    a.onended = ()=>{ stopAudio(); if(opts.onend) opts.onend(); resumeMicAuto(800); };
+    a.onended = ()=>{ stopAudio(); if(opts.onend) opts.onend(); resumeMicAuto(500); };
     player = a; playingIdx = idx;
     const btn = $("listen"); if(btn) btn.innerHTML = '<span class="di">■</span><span class="dl">Henti</span>';
     setStatus(`Mendengar bacaan betul — ${qari().name} · Ayat ${idx+1}.`);
@@ -1013,7 +992,7 @@ function playWord(tokenIdx, ayahIdx){
   a.preload = "auto";
   a.playbackRate = S.arate || 1;
   a.onerror = ()=>{ if(player===a){ player=null; playAyah(idx); } };
-  a.onended = ()=>{ stopAudio(); resumeMicAuto(800); };
+  a.onended = ()=>{ stopAudio(); resumeMicAuto(500); };
   player = a; playingIdx = idx; playingWord = tokenIdx;
   const btn = $("listen"); if(btn) btn.innerHTML = '<span class="di">■</span><span class="dl">Henti</span>';
   const tok = ayahTokens(current.ayat[idx]||"")[tokenIdx] || "";
@@ -1026,14 +1005,14 @@ function scheduleWordCorrection(tokenIdx, delay){
   const targetAyah = aIdx;
   const key = `${targetAyah}:${tokenIdx}`;
   const now = Date.now();
-  if(appSpeaking || player) return;              // satu kerja pada satu masa — jangan gelojoh
-  if(key === lastCorrectionKey && now - lastCorrectionAt < 1500) return;
+  if((player && playingIdx === aIdx && playingWord === tokenIdx) ||
+     (key === lastCorrectionKey && now - lastCorrectionAt < 1800)) return;
   clearTimeout(correctionTimer);
   correctionTimer = setTimeout(()=>{
     if(aIdx !== targetAyah) return;
     lastCorrectionKey = key; lastCorrectionAt = Date.now();
     playWord(tokenIdx, targetAyah);
-  }, delay || 0);   // betulkan SERTA-MERTA, tidak tunggu bacaan habis
+  }, delay || 300);
 }
 
 /* ============ 4c. AUTO MIC (jeda & sambung semula automatik) ============ */
@@ -1043,39 +1022,16 @@ let muteTimer = null;
 /* Dahulu app MENUTUP pengecaman suara setiap kali audio dimainkan — itulah punca
    bunyi "bib" pelayar berulang kali. Kini kita hanya ABAIKAN hasil sementara,
    jadi sesi mikrofon kekal terbuka dan senyap. */
-let appSpeaking = false;      // true bila app sedang bercakap/memainkan audio
-function setMicFrozen(on){
-  const m = document.getElementById("mic"), w = document.getElementById("mic-wrap");
-  if(m){ m.classList.toggle("freeze", !!on); m.setAttribute("aria-disabled", on ? "true" : "false"); }
-  if(w) w.classList.toggle("freeze", !!on);
-  const st = document.getElementById("state");
-  if(st && on){ st.textContent = "Mic dibekukan…"; st.classList.remove("live"); }
-}
-/* Mic BEKU sepenuhnya semasa app bercakap: sesi pengecaman ditutup supaya
-   mikrofon tidak merakam gema audio app (punca bacaan "sangkut-sangkut"). */
 function pauseMicAuto(){
-  clearTimeout(muteTimer);
-  appSpeaking = true;
-  micMuted = true;
-  setMicFrozen(true);
-  if(listening){
-    micAuto = true;
-    listening = false;
-    if(rec){ try{ rec.abort ? rec.abort() : rec.stop(); }catch(e){} }
-    stopUI();
-  }
+  if(listening){ micAuto = true; micMuted = true; clearTimeout(muteTimer); }
 }
 function resumeMicAuto(delay){
   clearTimeout(muteTimer);
   muteTimer = setTimeout(()=>{
     micMuted = false;
-    appSpeaking = false;
-    setMicFrozen(false);
-    const st = document.getElementById("state");
-    if(st && !listening) st.textContent = "Sedia";
     if(micAuto && S.autoMic && !listening) startRec();
     micAuto = false;
-  }, delay || 700);   // jeda pendek supaya mic tidak terburu-buru merakam
+  }, delay || 400);
 }
 
 /* ============ 4d. WARNA HUKUM TAJWID (standard antarabangsa) ============ */
@@ -1189,7 +1145,6 @@ function applySettings(){
   document.documentElement.style.setProperty("--ayah-size", S.size+"px");
   $("trans").style.fontSize = S.tsize+"px";
   $("ayah-text").classList.toggle("hidden-text", !S.showText);
-  $("ayah-text").classList.toggle("mushaf", (S.ayahView||"kata")==="mushaf");
   $("trans").hidden = !S.showTrans;
   // Kedudukan terjemahan: bawah setiap ayat, atau di bahagian bawah sekali
   const bottom = (S.transPos === "bawah");
@@ -1281,8 +1236,7 @@ async function wbwFetch(){
 function render(){
   const w = ayahTokens(currentAyah());
   $("tj-key").hidden = !S.tajwid;
-  const mushaf = (S.ayahView||"kata")==="mushaf";
-  const gloss = mushaf ? null : wbwGet();
+  const gloss = wbwGet();
   $("ayah-text").innerHTML = w.map((t,i)=>{
     const cls = marks[i]==="ok"?"ok":marks[i]==="bad"?"bad":(i===cursor?"cur":"");
     const inner = (S.tajwid && !marks[i]) ? tajwidHTML(t, w[i+1]) : escHtml(t);
@@ -1498,13 +1452,10 @@ function ayahComplete(){
   // Auto baca terjemahan bermula 1 saat selepas ayat selesai dibaca
   const myIdx = aIdx, mySeq = ++ayahSeq;
   const alive = ()=> (mySeq === ayahSeq && aIdx === myIdx);
-  const speakSoon = (after)=> {
-    pauseMicAuto();                       // bekukan mic sebaik ayat selesai
-    setTimeout(()=>{
-      if(!alive()){ resumeMicAuto(400); return; }
-      speakTranslation(()=>{ if(alive()) after && after(); }, myIdx);
-    }, S.transDelay || 1000);
-  };
+  const speakSoon = (after)=> setTimeout(()=>{
+    if(!alive()) return;
+    speakTranslation(()=>{ if(alive()) after && after(); }, myIdx);
+  }, S.transDelay || 1000);
   if(S.hafazan){
     repDone++;
     if(repDone < S.repeat){
@@ -1526,7 +1477,6 @@ function ayahComplete(){
    isFinal=true → tandakan juga yang salah. */
 function processSpoken(text, isFinal){
   if(!current) return;
-  if(appSpeaking || micMuted) return;   // app sedang bercakap — mic beku
   $("heard").textContent = text;
   const target = ayahTokens(currentAyah()).map(stripD);
   const sw = words(text);
@@ -1563,7 +1513,7 @@ function processSpoken(text, isFinal){
         setStatus(badTries>=2
           ? "Belum tepat lagi. Anda boleh tekan butang Langkau, atau ulang perkataan merah itu."
           : "Belum tepat lagi. Dengar bacaan yang betul, kemudian ulang perkataan merah itu.");
-        scheduleWordCorrection(bad, 0);
+        scheduleWordCorrection(bad, 300);
         return;
       }
       setStatus(badTries>=2
@@ -1602,7 +1552,7 @@ function processSpoken(text, isFinal){
         fixedOnce[bad]=true;
         if(S.strict) beep("err");
         setStatus("Perkataan itu belum tepat — dengar bacaan yang betul, kemudian teruskan bacaan.");
-        if(S.autoFix){ drillWord=bad; drillAt=Date.now(); render(); scheduleWordCorrection(bad, 0); }
+        if(S.autoFix){ drillWord=bad; drillAt=Date.now(); render(); scheduleWordCorrection(bad, 300); }
       } else {
         setStatus("Teruskan bacaan.");
       }
@@ -1617,7 +1567,7 @@ function processSpoken(text, isFinal){
       setStatus((S.drill || S.mustCorrect)
         ? "Bacaan belum tepat. Sila ulang perkataan merah ini sehingga betul sebelum diteruskan."
         : "Bacaan tidak tepat. Tekan pada perkataan merah untuk mendengar bacaan yang betul.");
-      if(S.autoFix){ const bad=cursor; drillWord=bad; drillAt=Date.now(); render(); scheduleWordCorrection(bad, 0); return; }
+      if(S.autoFix){ const bad=cursor; drillWord=bad; drillAt=Date.now(); render(); scheduleWordCorrection(bad, 350); return; }
     }
     if(!S.mustCorrect && !S.drill){ cursor++; }   // benarkan teruskan bila tetapan dimatikan
   }
@@ -1769,10 +1719,7 @@ async function startRec(){
     if(e.error==="network"){ setStatus("Pengecaman suara perlukan talian internet. Sila sambung internet dan cuba semula."); return; }
     setStatus("Ralat mikrofon: "+e.error);
   };
-  rec.onend=()=>{
-    if(listening && !appSpeaking){ setTimeout(()=>{ if(listening && !appSpeaking){ try{ rec.start(); }catch(e){} } }, 300); }
-    else stopUI();
-  };
+  rec.onend=()=>{ if(listening){ setTimeout(()=>{ try{ rec.start(); }catch(e){} }, 250); } else stopUI(); };
   rec.onresult=(ev)=>{
     gotAny = true;
     if(micMuted) return;        // sedang memainkan audio contoh — abaikan gema
@@ -1822,7 +1769,6 @@ function stopRec(){ listening=false; clearTimeout(watchdog); if(rec){ try{rec.st
 
 /* ============ 9. EVENT ============ */
 $("mic").onclick = ()=>{
-  if(appSpeaking) return;                 // mic beku — app sedang bercakap
   try{ (actx=actx||new (window.AudioContext||window.webkitAudioContext)()).resume(); }catch(e){}
   if(window.speechSynthesis){ try{ speechSynthesis.resume(); }catch(e){} }
   if(listening){ micAuto=false; stopRec(); } else { micAuto=false; startRec(); }
@@ -1881,8 +1827,6 @@ function initSettingsUI(){
   bindToggle("tg-automic","autoMic");
   bindToggle("tg-mustcorrect","mustCorrect");
   bindToggle("tg-drill","drill");
-  $("set-ayahview").value = S.ayahView || "kata";
-  $("set-ayahview").onchange = e => { S.ayahView = e.target.value; saveSettings(); applySettings(); if(current) render(); };
   $("set-transpos").value = S.transPos || "ayat";
   $("set-transpos").onchange = e => { S.transPos = e.target.value; saveSettings(); applySettings(); render(); };
 
@@ -1916,6 +1860,18 @@ $("open-set").onclick = ()=> $("sheet").classList.add("open");
 /* ☰ — tunjuk/sembunyi butang atas dalam paparan telefon */
 $("hdr-toggle").onclick = ()=>{ hdrShown = !hdrShown; applySettings(); };
 $("close-set").onclick = ()=> { saveSettings(); $("sheet").classList.remove("open"); };
+$("reset-set").onclick = ()=>{
+  if(!confirm("Set semula semua tetapan kepada tetapan asal aplikasi?")) return;
+  S = { ...DEFAULTS };
+  saveSettings();
+  initSettingsUI();
+  try{ $("set-voice").value = S.voice || ""; }catch(e){}
+  applySettings(); render();
+  try{ syncWakeLock(); }catch(e){}
+  try{ stopAudio(); syncAyahAudio(aIdx); }catch(e){}
+  setStatus("Semua tetapan telah kembali kepada tetapan asal.");
+};
+
 $("sheet").onclick = e => { if(e.target.id==="sheet"){ saveSettings(); $("sheet").classList.remove("open"); } };
 $("switch-profile").onclick = ()=>{
   const name = ($("set-profile").value||"").trim();
@@ -2247,7 +2203,6 @@ if("serviceWorker" in navigator && (location.protocol==="https:" || location.hos
   window.tasmiPrepare = prepare;
 
   $("mic").onclick = async ()=>{
-    if(appSpeaking) return;               // mic beku — app sedang bercakap
     try{ actx = actx || new (window.AudioContext||window.webkitAudioContext)(); actx.resume(); }catch(e){}
     if(window.speechSynthesis){ try{ speechSynthesis.resume(); }catch(e){} }
     if(typeof listening !== "undefined" && listening){ micAuto = false; stopRec(); return; }
