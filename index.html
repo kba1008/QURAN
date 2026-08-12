@@ -1071,7 +1071,13 @@ function clearFix(){ showFix(null); }
 /* Bila audio qari tidak ada, app WAJIB tetap menegur: baca perkataan itu
    menggunakan suara pelayar (bahasa Arab). */
 function speakArabic(text, onend){
-  if(!window.speechSynthesis || !text){ onend && onend(); return; }
+  if(!text){ onend && onend(); return; }
+  if(!window.speechSynthesis){
+    /* Tiada suara app: main audio ayat penuh supaya pengguna tetap dengar
+       bacaan yang betul. */
+    setStatus("Dengar bacaan ayat untuk perkataan yang betul.");
+    playAyah(aIdx); onend && onend(); return;
+  }
   try{
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
@@ -1079,8 +1085,14 @@ function speakArabic(text, onend){
     const v = (speechSynthesis.getVoices()||[]).find(v=>/^ar/i.test(v.lang));
     if(v) u.voice = v;
     u.rate = Math.min(1, safeRate());
-    let done=false; const fin=()=>{ if(done) return; done=true; resumeMicAuto(0); onend && onend(); };
-    u.onend = fin; u.onerror = fin;
+    let done=false, spoke=false;
+    const fin=()=>{ if(done) return; done=true; resumeMicAuto(0); onend && onend(); };
+    /* Jika suara app gagal berbunyi (tiada suara Arab dipasang), main audio
+       ayat penuh supaya teguran bacaan betul tetap kedengaran. */
+    const failToAyah=()=>{ if(done) return; done=true; try{ playAyah(aIdx); }catch(e){ resumeMicAuto(0); } onend && onend(); };
+    u.onstart = ()=>{ spoke = true; };
+    u.onend = fin; u.onerror = failToAyah;
+    setTimeout(()=>{ if(!spoke && !done) failToAyah(); }, 1800);
     pauseMicAuto();
     speechSynthesis.speak(u);
   }catch(e){ onend && onend(); }
@@ -1103,29 +1115,43 @@ function wordAudioUrl(ayahIdx, tokenIdx){
   const p3 = n => String(n).padStart(3,"0");
   return `https://audio.qurancdn.com/wbw/${p3(sur)}_${p3(ay)}_${p3(w)}.mp3`;
 }
-/* Mainkan bacaan betul bagi SATU perkataan; jika gagal, main keseluruhan ayat */
+/* Mainkan bacaan betul bagi SATU perkataan; jika gagal, baca dengan suara app */
+let wordSeq = 0;
 function playWord(tokenIdx, ayahIdx){
   const idx = (typeof ayahIdx === "number") ? ayahIdx : aIdx;
-  /* Keputusan interim boleh tiba berkali-kali untuk kesalahan yang sama. Jangan
-     hentikan dan mulakan semula audio yang sedang berbunyi — itu menyebabkan
-     hanya huruf hadapan kedengaran berulang-ulang. */
-  if(player && playingWord >= 0) return;   // biar audio pembetulan semasa habis dahulu
   const tokShow = ayahTokens(current.ayat[idx]||"")[tokenIdx] || "";
+  /* Jika perkataan YANG SAMA sedang berbunyi, biarkan ia habis. Perkataan lain
+     (atau ketikan pengguna) mesti SENTIASA boleh main — jangan sekali-kali
+     terkunci oleh audio lama yang tersangkut. */
+  if(player && playingWord === tokenIdx && playingIdx === idx && !player.ended && player.currentTime > 0) return;
   showFix(tokShow);
+  const mySeq = ++wordSeq;
   const url = wordAudioUrl(idx, tokenIdx);
-  if(!url){ speakArabic(tokShow); return; }
   pauseMicAuto();
   stopAudio();
+  if(!url){ speakArabic(tokShow); return; }
   const a = new Audio(url);
   a.preload = "auto";
   a.playbackRate = safeRate();
-  a.onerror = ()=>{ if(player===a){ player=null; playingWord=-1; speakArabic(tokShow); } };
-  a.onended = ()=>{ stopAudio(); resumeMicAuto(0); };
+  let settled = false;
+  const fallback = ()=>{
+    if(settled || mySeq !== wordSeq) return;
+    settled = true;
+    clearTimeout(watchdog);
+    if(player === a){ try{ a.pause(); }catch(e){} player = null; playingWord = -1; playingIdx = -1; }
+    /* Audio qari gagal/lambat → app WAJIB tetap menegur dengan bacaan betul. */
+    speakArabic(tokShow);
+  };
+  /* Jaring keselamatan: jika audio tidak mula berbunyi dalam 2.5s (offline,
+     404, atau sekatan pelayar), gunakan suara app. */
+  const watchdog = setTimeout(fallback, 2500);
+  a.onplaying = ()=>{ settled = true; clearTimeout(watchdog); };
+  a.onerror = fallback;
+  a.onended = ()=>{ settled = true; clearTimeout(watchdog); stopAudio(); resumeMicAuto(0); };
   player = a; playingIdx = idx; playingWord = tokenIdx;
   const btn = $("listen"); if(btn) btn.innerHTML = '<span class="di">■</span><span class="dl">Henti</span>';
-  const tok = ayahTokens(current.ayat[idx]||"")[tokenIdx] || "";
-  setStatus(`Bacaan betul bagi perkataan: ${tok}`);
-  a.play().catch(()=>{});
+  setStatus(`Bacaan betul bagi perkataan: ${tokShow}`);
+  a.play().catch(()=>{ fallback(); });
 }
 /* Satukan semua permintaan pembetulan bagi perkataan yang sama kepada satu
    mainan audio penuh. Ini menghapuskan audio bertindih/tersangkut. */
@@ -1175,7 +1201,7 @@ function pauseMicAuto(){
      semasa app bercakap tetap diabaikan melalui bendera appSpeaking. */
   /* JARING KESELAMATAN: jika bacaan app tersangkut (onend/onerror tidak pernah
      dipanggil), mikrofon mesti tetap hidup semula. */
-  failSafeTimer = setTimeout(()=>{ resumeMicAuto(0); }, 25000);
+  failSafeTimer = setTimeout(()=>{ resumeMicAuto(0); }, 8000);
 }
 function resumeMicAuto(delay){
   clearTimeout(muteTimer);
