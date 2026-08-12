@@ -127,25 +127,25 @@
   .ayah.hidden-text .w{color:transparent;text-shadow:0 0 14px rgba(234,243,239,.45)}
   .ayah.hidden-text .w.ok,.ayah.hidden-text .w.bad{color:inherit;text-shadow:none}
   .w{padding:2px 8px;border-radius:10px;transition:background .18s ease,color .18s ease;display:inline-block}
-  .w.ok{background:rgba(47,191,113,.18);color:#7fe6ab;box-shadow:inset 0 0 0 1px rgba(47,191,113,.35)}
-  .w.bad{background:rgba(239,75,93,.18);color:#ff9aa5;box-shadow:inset 0 0 0 1px rgba(239,75,93,.4);animation:shake .3s}
+  .w.ok{background:rgba(47,191,113,.30);box-shadow:inset 0 0 0 1px rgba(47,191,113,.35)}
+  .w.bad{background:rgba(239,75,93,.18);box-shadow:inset 0 0 0 1px rgba(239,75,93,.4);animation:shake .3s}
   .w.cur{background:rgba(216,182,120,.16);box-shadow:inset 0 0 0 1px rgba(216,182,120,.45)}
   .w{cursor:pointer}
   /* ===== Mod tulisan bersambung (seperti mushaf biasa) ===== */
   .ayah.joined{word-spacing:.18em}
   .ayah.joined .w{display:inline;padding:1px 2px;border-radius:8px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
-  .ayah.joined .w.ok{box-shadow:none;background:rgba(47,191,113,.16)}
+  .ayah.joined .w.ok{box-shadow:none;background:rgba(47,191,113,.25)}
   .ayah.joined .w.bad{box-shadow:none;background:rgba(239,75,93,.20)}
   .ayah.joined .w.cur{box-shadow:none;background:rgba(216,182,120,.22);
     border-bottom:2px solid var(--gold)}
   /* ===== Mod tulisan dipecahkan mengikut perkataan ===== */
   .ayah.split{word-spacing:normal;line-height:2.15}
   .ayah.split .w{margin:3px 4px}
-  .w.play{background:rgba(216,182,120,.32);box-shadow:inset 0 0 0 1px var(--gold);color:#fff5e0}
+  .w.play{background:rgba(216,182,120,.32);box-shadow:inset 0 0 0 1px var(--gold)}
   .hint{margin-top:10px;font-size:12px;color:var(--muted)}
   @keyframes shake{25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
   .w.again{animation:blinkok .7s ease-in-out 2}
-  @keyframes blinkok{0%,100%{background:rgba(47,191,113,.18)}50%{background:rgba(47,191,113,.55);color:#eafff2}}
+  @keyframes blinkok{0%,100%{background:rgba(47,191,113,.18)}50%{background:rgba(47,191,113,.55)}}
   .btn[disabled]{opacity:.4;pointer-events:none}
   .bar{height:6px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden;margin-top:6px}
   .bar > i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--green),var(--gold));transition:width .3s}
@@ -1866,27 +1866,86 @@ function stopMeter(){
 }
 
 /* Mulakan semula sesi pengecaman dengan selamat.
-   PENTING: setiap kali sesi dibuka, Chrome Android membunyikan "bib". Oleh itu
-   kami HAD-KAN kekerapan buka sesi (throttle) supaya tiada bunyi bib berulang
-   walaupun pelayar menamatkan sesi berkali-kali. */
+   PENTING: setiap kali sesi pengecaman DIBUKA, Chrome Android membunyikan "bib"
+   (bunyi sistem, tidak boleh dimatikan oleh laman web). Di telefon, enjin
+   menamatkan sesi setiap kali anda berhenti sebentar — jadi sesi dibuka semula
+   berkali-kali dan bunyi "bib bib" kedengaran sepanjang masa.
+   PENYELESAIAN: di telefon kami TIDAK membuka semula sesi secara automatik
+   sebaik sahaja ia tamat. Sebaliknya kami memasang pengesan suara ringan
+   (VAD) dan hanya membuka sesi baharu apabila anda benar-benar mula bersuara.
+   Jadi bunyi "bib" hanya sekali setiap kali anda mula membaca, bukan berterusan. */
 let lastRecStart = 0, recStartTimer = null;
-function safeStartRec(){
-  if(!rec || !listening || recRunning || micMuted || appSpeaking) return;
-  if(recStartTimer) return;                       // sudah dijadualkan
-  const gap = Date.now() - lastRecStart;
-  const wait = gap >= 1000 ? 0 : (1000 - gap);    // sekurang-kurangnya 1s antara sesi
-  const go = ()=>{
-    recStartTimer = null;
-    if(!rec || !listening || recRunning || micMuted || appSpeaking) return;
-    try{ rec.start(); recRunning = true; lastRecStart = Date.now(); }
-    catch(e){
-      /* "already started" — sesi sebenarnya masih hidup */
-      if(String(e && e.name) === "InvalidStateError"){ recRunning = true; return; }
-      lastRecStart = Date.now();
-    }
-  };
-  if(wait === 0) go(); else recStartTimer = setTimeout(go, wait);
+let vadWait = null;   // {stream, ctx, raf} — sedang menunggu suara sebelum buka sesi
+
+function stopVadWait(){
+  if(!vadWait) return;
+  try{ cancelAnimationFrame(vadWait.raf); }catch(e){}
+  try{ vadWait.stream.getTracks().forEach(t=>t.stop()); }catch(e){}
+  try{ vadWait.ctx.close(); }catch(e){}
+  vadWait = null;
 }
+
+function reallyStartRec(){
+  recStartTimer = null;
+  stopVadWait();
+  if(!rec || !listening || recRunning || micMuted || appSpeaking) return;
+  try{ rec.start(); recRunning = true; lastRecStart = Date.now(); }
+  catch(e){
+    /* "already started" — sesi sebenarnya masih hidup */
+    if(String(e && e.name) === "InvalidStateError"){ recRunning = true; return; }
+    lastRecStart = Date.now();
+  }
+}
+
+/* Tunggu sehingga pengguna bersuara, barulah buka sesi pengecaman (elak "bib" berulang). */
+async function startRecOnVoice(){
+  if(vadWait || recStartTimer) return;
+  if(!rec || !listening || recRunning || micMuted || appSpeaking) return;
+  let stream;
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({ audio:{
+      echoCancellation:true, noiseSuppression:true, autoGainControl:true, channelCount:1
+    }});
+  }catch(e){ reallyStartRec(); return; }            // gagal — guna cara lama
+  if(!listening || recRunning || micMuted || appSpeaking){
+    try{ stream.getTracks().forEach(t=>t.stop()); }catch(e2){}
+    return;
+  }
+  let ctx;
+  try{ ctx = new (window.AudioContext||window.webkitAudioContext)(); }
+  catch(e){ try{ stream.getTracks().forEach(t=>t.stop()); }catch(e2){} reallyStartRec(); return; }
+  try{ await ctx.resume(); }catch(e){}
+  const an = ctx.createAnalyser(); an.fftSize = 1024; an.smoothingTimeConstant = .6;
+  ctx.createMediaStreamSource(stream).connect(an);
+  const buf = new Float32Array(an.fftSize);
+  let hot = 0, floor = 0.004;
+  const step = ()=>{
+    if(!vadWait) return;
+    if(!listening || recRunning){ stopVadWait(); return; }
+    if(micMuted || appSpeaking){ hot = 0; vadWait.raf = requestAnimationFrame(step); return; }
+    an.getFloatTimeDomainData(buf);
+    let sum = 0; for(let i=0;i<buf.length;i++) sum += buf[i]*buf[i];
+    const rms = Math.sqrt(sum/buf.length);
+    if(rms < Math.max(floor*2.2, 0.006)) { floor = floor*0.97 + rms*0.03; hot = 0; }
+    else hot++;
+    $("mic-wrap").classList.toggle("voice", hot > 0);
+    if(hot >= 3){ reallyStartRec(); return; }       // suara dikesan → buka sesi (satu "bib" sahaja)
+    vadWait.raf = requestAnimationFrame(step);
+  };
+  vadWait = { stream, ctx, raf: 0 };
+  vadWait.raf = requestAnimationFrame(step);
+}
+
+/* immediate=true → buka sesi terus (contoh: pengguna baru tekan butang mic). */
+function safeStartRec(immediate){
+  if(!rec || !listening || recRunning || micMuted || appSpeaking) return;
+  if(recStartTimer || vadWait) return;             // sudah dijadualkan / sedang menunggu suara
+  if(isMobile && !immediate){ startRecOnVoice(); return; }
+  const gap = Date.now() - lastRecStart;
+  const wait = gap >= 1000 ? 0 : (1000 - gap);     // sekurang-kurangnya 1s antara sesi
+  if(wait === 0) reallyStartRec(); else recStartTimer = setTimeout(reallyStartRec, wait);
+}
+
 
 function micUI(on){
   $("mic").classList.toggle("on", !!on);
@@ -1998,7 +2057,7 @@ async function startRec(){
     }
   };
   recRunning = false;
-  safeStartRec();
+  safeStartRec(true);            // pengguna baru tekan mic — buka sesi terus
   startMeter();
 }
 function stopUI(){
@@ -2007,6 +2066,7 @@ function stopUI(){
   stopMeter();
 }
 function stopRec(){ listening=false; recRunning=false; micMuted=false; appSpeaking=false;
+  stopVadWait();
   clearTimeout(muteTimer); clearTimeout(failSafeTimer); clearTimeout(watchdog); if(rec){ try{rec.stop();}catch(e){} } stopUI(); }
 
 /* ============ 9. EVENT ============ */
@@ -2017,7 +2077,7 @@ $("mic").onclick = ()=>{
   if(listening && !recRunning){        // sesi tersangkut selepas app bercakap — hidupkan semula
     micMuted=false; appSpeaking=false;
     if(!mediaStream) startMeter();
-    safeStartRec(); micUI(true); setStatus("Mikrofon dihidupkan semula. Sila teruskan bacaan.");
+    safeStartRec(true); micUI(true); setStatus("Mikrofon dihidupkan semula. Sila teruskan bacaan.");
     return;
   }
   if(listening){ stopRec(); } else { startRec(); }
