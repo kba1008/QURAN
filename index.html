@@ -29,6 +29,12 @@
     padding-bottom:.35em; margin-bottom:.45em; border-bottom:1px solid var(--line);
   }
   .ayah .ayah-line{ display:block; }
+  /* Halangan nyata selepas Bismillah: garis pemisah + ruang */
+  .ayah .bsm-gap{
+    display:block; height:0; margin:.15em 0 .55em;
+    border-top:1px dashed var(--line);
+  }
+  .ayah .bsm-line .w{ opacity:.9; }
   .ayah .ayah-line .ayno{
     display:inline-block; font-family:Manrope,system-ui,sans-serif; font-size:.42em;
     color:var(--gold); border:1px solid var(--line); border-radius:999px;
@@ -1095,7 +1101,7 @@ function scheduleWordCorrection(tokenIdx, delay){
      ganggu — biar bacaan habis dulu supaya tidak tersangkut-sangkut. */
   if(appSpeaking) return;
   if((player && playingIdx === aIdx && playingWord === tokenIdx) ||
-     (key === lastCorrectionKey && now - lastCorrectionAt < 900)) return;
+     (key === lastCorrectionKey && now - lastCorrectionAt < 2200)) return;
   clearTimeout(correctionTimer);
   correctionTimer = setTimeout(()=>{
     if(aIdx !== targetAyah || appSpeaking) return;
@@ -1374,8 +1380,8 @@ function render(){
     return `<span class="wu">${word}<span class="wt">${escHtml(gloss[i]||"")}</span></span>`;
   }).join(" ");
 
-  const bsmSplit = (aIdx === 0 && current.n !== 1 && current.n !== 9 &&
-                    stripD(currentAyah()).startsWith(stripD(BISMILLAH)) && w.length > 4);
+  const bsmN = bsmCount();
+  const bsmSplit = bsmN > 0;
 
   if(fullPage){
     /* Seluruh surah dipaparkan seperti satu muka mushaf. Semakan bacaan kekal
@@ -1402,8 +1408,9 @@ function render(){
       return `<span class="wu">${word}<span class="wt">${escHtml(gloss[i]||"")}</span></span>`;
     });
     $("ayah-text").innerHTML =
-      `<div class="bsm-line">${parts.slice(0,4).join(" ")}</div>` +
-      `<div class="ayah-line">${parts.slice(4).join(" ")}<span class="ayno">${aIdx+1}</span></div>`;
+      `<div class="bsm-line">${parts.slice(0,bsmN).join(" ")}</div>` +
+      `<div class="bsm-gap" aria-hidden="true"></div>` +
+      `<div class="ayah-line">${parts.slice(bsmN).join(" ")}<span class="ayno">${aIdx+1}</span></div>`;
   } else {
     $("ayah-text").innerHTML = `<div class="ayah-line">${wordsHTML}<span class="ayno">${aIdx+1}</span></div>`;
   }
@@ -1453,6 +1460,7 @@ function loadAyah(i,resetRep=true){
   aIdx = Math.max(0, Math.min(+i || 0, current.ayat.length-1));
   cursor=0; if(resetRep) repDone=0; drillWord=-1; drillAt=0; badTries=0; fixedOnce={};
   marks = new Array(ayahTokens(currentAyah()).length).fill(null);
+  resetHeard(); applyBsmBarrier();
   $("ayah").value = aIdx;
   $("surah").value = current.n;
   render();
@@ -1461,7 +1469,7 @@ function loadAyah(i,resetRep=true){
   saveResume();
   if(S.autoPlay) setTimeout(()=>playAyah(aIdx), 250);
 }
-function resetAyah(){ cursor=0; bestCursor=0; bestMarks=[]; marks=marks.map(()=>null); drillWord=-1; drillAt=0; badTries=0; fixedOnce={}; render(); }
+function resetAyah(){ cursor=0; bestCursor=0; bestMarks=[]; marks=marks.map(()=>null); drillWord=-1; drillAt=0; badTries=0; fixedOnce={}; resetHeard(); applyBsmBarrier(); render(); }
 
 function nextAyah(){
   if(aIdx+1 < current.ayat.length) loadAyah(aIdx+1);
@@ -1521,7 +1529,7 @@ async function loadSurah(n, targetAyah = 0){
   fillAyahSelect();
   loadAyah(Math.max(0, Math.min(+targetAyah || 0, current.ayat.length - 1)));
   setStatus((n!==1 && n!==9)
-    ? "Mulakan dengan Bismillah — ia termasuk dalam semakan ayat pertama."
+    ? "Bismillah diasingkan daripada ayat 1 dan tidak disemak. Mula baca ayat 1."
     : "Tekan mikrofon dan mula membaca.");
   busy = false;
 }
@@ -1635,6 +1643,57 @@ function ayahComplete(){
   speakSoon(()=>setTimeout(()=>{ nextAyah(); resumeMicAuto(0); }, 700));
 }
 
+/* ===== HALANGAN BISMILLAH =====
+   Bismillah pada ayat pertama (kecuali Al-Fatihah & At-Taubah) DIASINGKAN
+   daripada baris ayat: ia tidak disemak, tidak boleh ditandakan salah, dan
+   kursor semakan TIDAK BOLEH sekali-kali berundur ke dalamnya. Inilah punca
+   masalah lama: perkataan seperti "الله" / "الرحمن" dalam Bismillah berulang
+   di dalam ayat, jadi app tersalah undur ke Bismillah lalu tersangkut. */
+function bsmCount(){
+  if(!current || aIdx !== 0 || current.n === 1 || current.n === 9) return 0;
+  const t = ayahTokens(currentAyah());
+  if(t.length <= 4) return 0;
+  return stripD(t.slice(0,4).join(" ")) === stripD(BISMILLAH) ? 4 : 0;
+}
+/* Tandakan Bismillah sebagai lulus & letakkan kursor selepas halangan */
+function applyBsmBarrier(){
+  const n = bsmCount();
+  for(let i=0;i<n;i++) marks[i] = "ok";
+  if(cursor < n) cursor = n;
+  return n;
+}
+
+/* ===== PENAMBAT FRASA (phrase anchoring) =====
+   Al-Quran mempunyai banyak perkataan & frasa yang berulang. Oleh itu app TIDAK
+   menyelaraskan kedudukan bacaan berdasarkan SATU perkataan sahaja. Kami simpan
+   beberapa perkataan terakhir yang didengar; kursor hanya dipindahkan apabila
+   GABUNGAN perkataan itu jelas menunjuk kepada satu kedudukan. Jika masih kabur,
+   app terus MENDENGAR (tiada markah salah diberi). */
+let heardBuf = [];
+function resetHeard(){ heardBuf = []; }
+function pushHeard(w){ heardBuf.push(w); if(heardBuf.length > 8) heardBuf.shift(); }
+function ctxScore(j, target, depth){
+  let sc = 0, n = 0;
+  for(let k=1;k<=depth;k++){
+    const h = heardBuf[heardBuf.length-1-k], t = target[j-k];
+    if(h === undefined || t === undefined) break;
+    sc += similar(h, t); n++;
+  }
+  return n ? sc/n : 0;
+}
+function alignBack(spoken, target, floor, cursorNow){
+  const cands = [];
+  for(let j=floor;j<cursorNow;j++) if(similar(spoken, target[j]) >= TOL_BACK()) cands.push(j);
+  if(!cands.length) return null;
+  if(cands.length === 1) return { i:cands[0], sure:true };
+  const depth = Math.min(3, Math.max(0, heardBuf.length-1));
+  const scored = cands.map(j=>({ i:j, s:ctxScore(j, target, depth) }))
+                      .sort((a,b)=> (b.s-a.s) || (b.i-a.i));
+  if(depth < 1) return { i:scored[scored.length-1].i, sure:false };
+  if(scored[0].s >= 0.70 && (scored[0].s - scored[1].s) >= 0.10) return { i:scored[0].i, sure:true };
+  return { i:scored[0].i, sure:false };
+}
+
 /* Semakan perkataan demi perkataan.
    isFinal=false (interim) → hanya tandakan yang BETUL supaya semakan nampak serta-merta.
    isFinal=true → tandakan juga yang salah. */
@@ -1643,6 +1702,7 @@ function processSpoken(text, isFinal){
   $("heard").textContent = text;
   const target = ayahTokens(currentAyah()).map(stripD);
   const sw = words(text);
+  const floor = applyBsmBarrier();     // Bismillah: halangan, tidak disemak
 
   for(let si=0; si<sw.length; si++){
     const spoken = sw[si];
@@ -1655,22 +1715,22 @@ function processSpoken(text, isFinal){
     /* Cari padanan pada perkataan yang SUDAH dilalui (dari yang terdekat ke belakang).
        Ini membolehkan pembaca mengulang bacaan dari mana-mana kedudukan — termasuk
        dari awal ayat — dan app akan menyelaraskan kursor secara bijak. */
+    /* --- MENYELARAS SEMULA KEDUDUKAN BACAAN (berasaskan FRASA) ---
+       Pembaca dibenarkan mula semula beberapa perkataan sebelum perkataan yang
+       salah. App akan mendengar dahulu, mengenal pasti frasa itu daripada ayat
+       mana / kedudukan mana, baru menyambung semakan. */
+    pushHeard(spoken);
     let already = -1;
-    for(let j2=cursor-1;j2>=0;j2--){
-      if(similar(spoken, target[j2]) >= TOL_BACK()){ already = j2; break; }
-    }
-    /* ULANG DARI AWAL AYAT: pembaca menyebut semula perkataan pertama (atau
-       perkataan awal) ayat. App TIDAK boleh terus menghukum — ia mesti DENGAR
-       dahulu bacaan itu sehingga sampai semula ke perkataan bermasalah. */
-    if(already < 0 && cursor > 0 && similar(spoken, target[cursor]) < TOL()){
-      const lim = Math.min(cursor, target.length);
-      for(let j2=0;j2<lim;j2++){
-        if(similar(spoken, target[j2]) >= TOL()){ already = j2; break; }
+    const al = alignBack(spoken, target, floor, cursor);
+    if(al){
+      if(al.sure) already = al.i;
+      else {
+        // Frasa masih kabur (perkataan berulang) — DENGAR dahulu, jangan hukum.
+        cancelWordCorrection();
+        setStatus("App sedang mendengar — teruskan bacaan beberapa perkataan lagi.");
+        continue;
       }
     }
-    /* Bila bacaan diulang: batalkan pembetulan yang menunggu dan KOSONGKAN
-       markah merah dari kedudukan itu ke hadapan supaya perkataan tersebut
-       dinilai semula secara adil apabila pembaca sampai kepadanya. */
     if(already >= 0){
       cancelWordCorrection();
       drillWord = -1; badTries = 0;
@@ -1678,7 +1738,7 @@ function processSpoken(text, isFinal){
       for(let k=already;k<marks.length;k++){
         if(marks[k]==="bad"){ marks[k]=null; fixedOnce[k]=false; hadBad = true; }
       }
-      if(hadBad) setStatus(already === 0
+      if(hadBad) setStatus(already <= floor
         ? "Bacaan diulang dari awal ayat — app sedang mendengar, teruskan."
         : "Bacaan diulang — app sedang mendengar, teruskan.");
     }
@@ -1919,6 +1979,7 @@ async function startRec(){
   rec.onstart=()=>{
     listening=true; recRunning=true;
     snaps = {}; segCut = {};    // PENTING: buang snapshot lama supaya kemajuan tidak berundur
+    resetHeard();
     $("mic").classList.add("on"); $("mic-wrap").classList.add("on");
     $("state").textContent="Mendengar…"; $("state").classList.add("live");
     setStatus("Sedang mendengar bacaan anda…");
