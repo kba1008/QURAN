@@ -468,7 +468,6 @@
         <div class="switch"><span>Mainkan bacaan betul bila salah</span><div class="tg" id="tg-autofix"></div></div>
         <div class="switch"><span>Mod bebas: salah kekal merah, betulkan sekali sahaja &amp; teruskan bacaan</span><div class="tg" id="tg-freeflow"></div></div>
         <div class="switch"><span>Guru tegas (tanda bila salah)</span><div class="tg" id="tg-strict"></div></div>
-        <div class="switch"><span>Bunyi isyarat bip (matikan untuk bacaan senyap)</span><div class="tg" id="tg-sfx"></div></div>
         <div class="switch"><span>Pemprosesan audio canggih (penapis bising + pengesan suara)</span><div class="tg" id="tg-dsp"></div></div>
         <div class="switch"><span>Guna pemprosesan audio pada telefon (eksperimen)</span><div class="tg" id="tg-dspmobile"></div></div>
         <div class="switch"><span>Auto buka mikrofon selepas app habis bercakap</span><div class="tg" id="tg-automic"></div></div>
@@ -748,7 +747,7 @@ const DEFAULTS = {
   qari:"ar.alafasy", arate:1, autoFix:true, autoPlay:false,
   theme:"sky", tajwid:true, autoMic:true, mustCorrect:true, transDelay:1000, keepAwake:true,
   drill:false, transPos:"ayat", freeFlow:false, wbw:true, hideHdr:true,
-  sfx:false, dsp:false, dspMobile:true
+  sfx:false /* sentiasa senyap */, dsp:false, dspMobile:true
 
 };
 
@@ -825,7 +824,7 @@ const TOL = () => S.tol/100;
 /* ============ 4. BUNYI BIP ============ */
 let actx;
 function beep(type){
-  return;                                                   // bunyi bip dimatikan sepenuhnya (mengganggu bacaan)
+  return;   // SENTIASA senyap: tiada bunyi bip sama sekali (mic on/off pun senyap)                                                   // bunyi bip dimatikan sepenuhnya (mengganggu bacaan)
   if(!S.sfx) return;                                        // bunyi isyarat dimatikan (lalai)
   if(typeof listening!=="undefined" && listening) return;   // senyap semasa mendengar
   try{
@@ -1030,17 +1029,26 @@ function pauseMicAuto(){
   clearTimeout(muteTimer);
   micMuted = true;
   appSpeaking = true;
-  if(listening){ micAuto = true; }
+  /* MATIKAN mikrofon sepenuhnya semasa app membetulkan bacaan supaya audio
+     pembetulan tidak masuk ke dalam pengecaman. Akan dihidupkan semula
+     serta-merta selepas pembetulan habis. */
+  if(listening){
+    micAuto = true;
+    listening = false;
+    clearTimeout(watchdog);
+    if(rec){ try{ rec.abort ? rec.abort() : rec.stop(); }catch(e){} }
+    if(mediaStream){ try{ mediaStream.getTracks().forEach(t=>t.enabled=false); }catch(e){} }
+    stopUI();
+  }
 }
 function resumeMicAuto(delay){
   clearTimeout(muteTimer);
-  /* Beri sedikit jeda selepas app habis bercakap supaya ekor audio tidak
-     ditangkap sebagai suara pengguna. */
-  const d = (typeof delay === "number" && delay > 200) ? delay : 220;
+  /* Hidupkan semula mikrofon SEPANTAS KILAT selepas pembetulan habis. */
+  const d = (typeof delay === "number" && delay > 0) ? Math.min(delay, 120) : 60;
   muteTimer = setTimeout(()=>{
     micMuted = false;
     appSpeaking = false;
-    // Jika pengecaman terputus sendiri semasa kami sedang bercakap, hidupkan semula.
+    if(mediaStream){ try{ mediaStream.getTracks().forEach(t=>t.enabled=true); }catch(e){} }
     if(micAuto && S.autoMic && !listening){ try{ startRec(); }catch(e){} }
     micAuto = false;
   }, d);
@@ -1733,7 +1741,15 @@ async function startRec(){
     if(e.error==="network"){ setStatus("Pengecaman suara perlukan talian internet. Sila sambung internet dan cuba semula."); return; }
     setStatus("Ralat mikrofon: "+e.error);
   };
-  rec.onend=()=>{ if(listening && !micMuted){ setTimeout(()=>{ try{ rec.start(); }catch(e){} }, 250); } else stopUI(); };
+  /* Sesi pengecaman sentiasa disambung semula serta-merta (termasuk semasa app
+     sedang membaca pembetulan) supaya mikrofon tidak pernah "mati" dan tiada
+     bunyi bip mula/henti berulang daripada pelayar. */
+  rec.onend=()=>{
+    if(!listening || micMuted){ stopUI(); return; }
+    try{ rec.start(); }
+    catch(e){ setTimeout(()=>{ if(listening && !micMuted){ try{ rec.start(); }catch(_){} } }, 80); }
+  };
+
   let skipUntil = 0;          // segmen yang dituturkan semasa app bercakap — buang
   rec.onresult=(ev)=>{
     gotAny = true;
@@ -1854,7 +1870,6 @@ function initSettingsUI(){
   bindToggle("tg-hidehdr","hideHdr", ()=>{ hdrShown=false; applySettings(); });
   bindToggle("tg-hafazan","hafazan");
   bindToggle("tg-strict","strict");
-  bindToggle("tg-sfx","sfx");
   bindToggle("tg-dsp","dsp", ()=>{ if(listening){ stopMeter(); startMeter(); } });
   bindToggle("tg-dspmobile","dspMobile", ()=>{ if(listening){ stopMeter(); startMeter(); } });
   bindRange("set-repeat","repeat","rep-val");
