@@ -12,17 +12,6 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Manrope:wght@400;600;800&display=swap" rel="stylesheet" />
 <style>
-  /* ==== BAR PEMBETULAN (teguran bacaan betul) ==== */
-  .fixbar{
-    margin:10px 0; padding:12px 14px; border:1px solid var(--line); border-radius:14px;
-    background:var(--soft); text-align:center;
-  }
-  .fixbar .fx-lbl{ font-family:Manrope,system-ui,sans-serif; font-size:12px; color:var(--gold);
-    letter-spacing:.04em; text-transform:uppercase; }
-  .fixbar .fx-ar{ font-family:"Amiri Quran",serif; font-size:clamp(26px,7vw,40px); line-height:1.9;
-    color:var(--text); direction:rtl; }
-  .fixbar .fx-hint{ font-family:Manrope,system-ui,sans-serif; font-size:12px; color:var(--muted); }
-
   /* ==== MOD PAPARAN SATU MUKA PENUH ==== */
   .ayah.fullpage{ text-align:justify; line-height:2.1; max-height:none; }
   .ayah.fullpage .ay{ }
@@ -424,7 +413,6 @@
 
     <p class="hint">Tekan satu perkataan untuk dengar bacaan betul perkataan itu. Klik dua kali untuk dengar seluruh ayat.</p>
     <div class="heard" id="heard"></div>
-    <div class="fixbar" id="fixbar" hidden></div>
     <div class="status" id="status">Tekan mikrofon sekali dan mula membaca. Guru akan menyemak setiap perkataan.</div>
 
     <div class="legend">
@@ -1058,34 +1046,6 @@ function toggleListenAyah(){
   else playAyah(aIdx);
 }
 
-/* ---- TEGURAN BACAAN BETUL (visual + suara) ---- */
-function showFix(tok, hint){
-  const el = $("fixbar"); if(!el) return;
-  if(!tok){ el.hidden = true; el.innerHTML = ""; return; }
-  el.hidden = false;
-  el.innerHTML = '<div class="fx-lbl">Bacaan yang betul</div>'
-    + '<div class="fx-ar" dir="rtl">' + tok + '</div>'
-    + '<div class="fx-hint">' + (hint || "Dengar, kemudian ulang perkataan ini.") + '</div>';
-}
-function clearFix(){ showFix(null); }
-/* Bila audio qari tidak ada, app WAJIB tetap menegur: baca perkataan itu
-   menggunakan suara pelayar (bahasa Arab). */
-function speakArabic(text, onend){
-  if(!window.speechSynthesis || !text){ onend && onend(); return; }
-  try{
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = "ar-SA";
-    const v = (speechSynthesis.getVoices()||[]).find(v=>/^ar/i.test(v.lang));
-    if(v) u.voice = v;
-    u.rate = Math.min(1, safeRate());
-    let done=false; const fin=()=>{ if(done) return; done=true; resumeMicAuto(0); onend && onend(); };
-    u.onend = fin; u.onerror = fin;
-    pauseMicAuto();
-    speechSynthesis.speak(u);
-  }catch(e){ onend && onend(); }
-}
-
 /* ---- Audio PERKATAAN demi PERKATAAN (word-by-word) ---- */
 const BISMILLAH = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ";
 const hasArabic = t => /[\u0621-\u064A]/.test(stripD(t));
@@ -1110,16 +1070,14 @@ function playWord(tokenIdx, ayahIdx){
      hentikan dan mulakan semula audio yang sedang berbunyi — itu menyebabkan
      hanya huruf hadapan kedengaran berulang-ulang. */
   if(player && playingWord >= 0) return;   // biar audio pembetulan semasa habis dahulu
-  const tokShow = ayahTokens(current.ayat[idx]||"")[tokenIdx] || "";
-  showFix(tokShow);
   const url = wordAudioUrl(idx, tokenIdx);
-  if(!url){ speakArabic(tokShow); return; }
+  if(!url){ playAyah(idx); return; }
   pauseMicAuto();
   stopAudio();
   const a = new Audio(url);
   a.preload = "auto";
   a.playbackRate = safeRate();
-  a.onerror = ()=>{ if(player===a){ player=null; playingWord=-1; speakArabic(tokShow); } };
+  a.onerror = ()=>{ if(player===a){ player=null; playAyah(idx); } };
   a.onended = ()=>{ stopAudio(); resumeMicAuto(0); };
   player = a; playingIdx = idx; playingWord = tokenIdx;
   const btn = $("listen"); if(btn) btn.innerHTML = '<span class="di">■</span><span class="dl">Henti</span>';
@@ -1135,7 +1093,7 @@ function scheduleWordCorrection(tokenIdx, delay){
   const now = Date.now();
   /* Jika app SEDANG bercakap (audio pembetulan / terjemahan), jangan sekali-kali
      ganggu — biar bacaan habis dulu supaya tidak tersangkut-sangkut. */
-  if(appSpeaking){ clearTimeout(correctionTimer); correctionTimer = setTimeout(()=>scheduleWordCorrection(tokenIdx, 0), 700); return; }
+  if(appSpeaking) return;
   if((player && playingIdx === aIdx && playingWord === tokenIdx) ||
      (key === lastCorrectionKey && now - lastCorrectionAt < 900)) return;
   clearTimeout(correctionTimer);
@@ -1170,9 +1128,7 @@ function pauseMicAuto(){
   /* JANGAN tutup sesi pengecaman — setiap kali sesi ditutup/dibuka, pelayar
      (Chrome Android) membunyikan "bib". Kami hanya membisukan trek mikrofon
      dan mengabaikan semua hasil pengecaman selagi app sedang bercakap. */
-  /* Trek mikrofon dibiarkan HIDUP: mematikan trek menyebabkan enjin pengecaman
-     menamatkan sesi, dan sesi baharu = satu lagi bunyi "bib". Hasil pengecaman
-     semasa app bercakap tetap diabaikan melalui bendera appSpeaking. */
+  if(mediaStream){ try{ mediaStream.getTracks().forEach(t=>t.enabled=false); }catch(e){} }
   /* JARING KESELAMATAN: jika bacaan app tersangkut (onend/onerror tidak pernah
      dipanggil), mikrofon mesti tetap hidup semula. */
   failSafeTimer = setTimeout(()=>{ resumeMicAuto(0); }, 25000);
@@ -1185,13 +1141,11 @@ function resumeMicAuto(delay){
   muteTimer = setTimeout(()=>{
     micMuted = false;
     appSpeaking = false;
-
+    if(mediaStream){ try{ mediaStream.getTracks().forEach(t=>t.enabled=true); }catch(e){} }
     if(listening){
       /* Sesi mungkin telah ditamatkan oleh pelayar semasa mic dibisukan —
          mulakan semula serta-merta supaya bacaan pengguna terus didengar. */
       if(!mediaStream) startMeter();
-      /* Sesi lama biasanya masih hidup. Jika benar-benar tamat, sesi baharu
-         hanya dibuka apabila pengguna mula bersuara (elak "bib" berulang). */
       if(!recRunning) safeStartRec();
       micUI(true);
     } else if(micAuto && S.autoMic){
@@ -1202,11 +1156,8 @@ function resumeMicAuto(delay){
 }
 /* Pengawas: pastikan pengecaman TIDAK PERNAH mati selagi mic dihidupkan. */
 setInterval(()=>{
-  if(!listening || micMuted || appSpeaking || recRunning) return;
-  if(vadWait || recStartTimer) return;                 // sedang menunggu suara
-  if(Date.now() - lastRecStart < 4000) return;         // jangan buka sesi bertalu-talu
-  safeStartRec();
-}, 4000);
+  if(listening && !micMuted && !appSpeaking && !recRunning) safeStartRec();
+}, 1200);
 
 /* ============ 4d. WARNA HUKUM TAJWID (standard antarabangsa) ============ */
 const HARAKAT = "\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED";
@@ -1495,7 +1446,6 @@ function scrollTransIntoView(follow){
 }
 
 function loadAyah(i,resetRep=true){
-  clearFix();
   if(!current) return;
   stopAudio();
   ayahSeq++; cancelTranslation();
@@ -1511,7 +1461,7 @@ function loadAyah(i,resetRep=true){
   saveResume();
   if(S.autoPlay) setTimeout(()=>playAyah(aIdx), 250);
 }
-function resetAyah(){ clearFix(); cursor=0; bestCursor=0; bestMarks=[]; marks=marks.map(()=>null); drillWord=-1; drillAt=0; badTries=0; fixedOnce={}; render(); }
+function resetAyah(){ cursor=0; bestCursor=0; bestMarks=[]; marks=marks.map(()=>null); drillWord=-1; drillAt=0; badTries=0; fixedOnce={}; render(); }
 
 function nextAyah(){
   if(aIdx+1 < current.ayat.length) loadAyah(aIdx+1);
@@ -1661,6 +1611,7 @@ let rec=null, mediaStream=null, rafId=null;
 
 let ayahSeq = 0;
 function ayahComplete(){
+  beep("ok");
   // Auto baca terjemahan bermula 1 saat selepas ayat selesai dibaca
   const myIdx = aIdx, mySeq = ++ayahSeq;
   const alive = ()=> (mySeq === ayahSeq && aIdx === myIdx);
@@ -1737,7 +1688,8 @@ function processSpoken(text, isFinal){
     // MOD LATIH TUBI: perkataan sedang dibetulkan — wajib baca semula perkataan itu sahaja
     if(!S.freeFlow && S.drill && marks[cursor]==="bad"){
       if(similar(spoken, target[cursor]) >= TOL()){
-        marks[cursor]="ok"; cursor++; drillWord=-1; badTries=0; clearFix();
+        marks[cursor]="ok"; cursor++; drillWord=-1; badTries=0;
+        if(S.strict) beep("ok");
         setStatus("Bagus! Perkataan itu sudah betul. Teruskan bacaan.");
         continue;
       }
@@ -1762,7 +1714,7 @@ function processSpoken(text, isFinal){
     }
 
     if(similar(spoken, target[cursor]) >= TOL()){
-      marks[cursor]="ok"; cursor++; badTries=0; clearFix(); continue;
+      marks[cursor]="ok"; cursor++; badTries=0; continue;
     }
     /* Melangkau perkataan yang salah TIDAK dibenarkan: kami tidak lagi
        "melompat" ke perkataan berikutnya walaupun ia dipadankan. */
@@ -1782,6 +1734,7 @@ function processSpoken(text, isFinal){
       const first = !fixedOnce[bad];
       if(first){
         fixedOnce[bad]=true;
+        if(S.strict) beep("err");
         setStatus("Perkataan itu belum tepat — dengar bacaan yang betul, kemudian teruskan bacaan.");
         if(S.autoFix){ drillWord=bad; drillAt=Date.now(); render(); scheduleWordCorrection(bad, 0); }
       } else {
@@ -1794,7 +1747,7 @@ function processSpoken(text, isFinal){
     if(marks[cursor] !== "bad"){
       marks[cursor]="bad";
       badTries = 1;
-      
+      if(S.strict){ beep("err"); }
       setStatus((S.drill || S.mustCorrect)
         ? "Bacaan belum tepat. Sila ulang perkataan merah ini sehingga betul sebelum diteruskan."
         : "Bacaan tidak tepat. Tekan pada perkataan merah untuk mendengar bacaan yang betul.");
@@ -1987,9 +1940,9 @@ async function startRecOnVoice(){
 function safeStartRec(immediate){
   if(!rec || !listening || recRunning || micMuted || appSpeaking) return;
   if(recStartTimer || vadWait) return;             // sudah dijadualkan / sedang menunggu suara
-  if(!immediate){ startRecOnVoice(); return; }     // semua peranti: tunggu suara dahulu
+  if(isMobile && !immediate){ startRecOnVoice(); return; }
   const gap = Date.now() - lastRecStart;
-  const wait = gap >= 1500 ? 0 : (1500 - gap);     // sekurang-kurangnya 1.5s antara sesi
+  const wait = gap >= 1000 ? 0 : (1000 - gap);     // sekurang-kurangnya 1s antara sesi
   if(wait === 0) reallyStartRec(); else recStartTimer = setTimeout(reallyStartRec, wait);
 }
 
@@ -2134,7 +2087,7 @@ $("skip").onclick = ()=>{
   const hasBad = marks.some(m=>m==="bad");
   if(!S.freeFlow && (!hasBad || badTries < 2)){
     setStatus("Sila ulang baca perkataan merah sekurang-kurangnya 2 kali sebelum melangkau.");
-    updateSkipBtn(); return;
+    beep("err"); updateSkipBtn(); return;
   }
   if(cursor < t.length){
     marks[cursor]="bad"; fixedOnce[cursor]=true; cursor++; badTries=0; drillWord=-1;
