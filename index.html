@@ -944,6 +944,25 @@ const QARI = [
   {id:"ar.abdulbasitmurattal", name:"Abdul Basit (Murattal)", ea:"Abdul_Basit_Murattal_192kbps"}
 ];
 let player = null, playingIdx = -1, playingWord = -1, playSeq = 0;
+/* Satu saluran audio kekal digunakan untuk semua pembetulan. Pada telefon,
+   Audio() baharu yang dicipta selepas keputusan mikrofon sering disekat sebagai
+   autoplay. Saluran ini dibuka ketika pengguna menyentuh skrin/mikrofon, lalu
+   boleh digunakan semula apabila app perlu membetulkan bacaan secara automatik. */
+const correctionAudio = new Audio();
+correctionAudio.preload = "auto";
+correctionAudio.setAttribute("playsinline", "");
+let correctionAudioUnlocked = false;
+const SILENT_WAV = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+function unlockCorrectionAudio(){
+  if(correctionAudioUnlocked) return;
+  try{
+    correctionAudio.src = SILENT_WAV;
+    correctionAudio.volume = 0.01;
+    const p = correctionAudio.play();
+    correctionAudioUnlocked = true;
+    if(p && p.then) p.then(()=>{ correctionAudio.pause(); correctionAudio.currentTime = 0; correctionAudio.volume = 1; }).catch(()=>{ correctionAudio.volume = 1; });
+  }catch(e){ correctionAudio.volume = 1; }
+}
 let correctionTimer = null, lastCorrectionKey = "", lastCorrectionAt = 0;
 
 function qari(){ return QARI.find(q=>q.id===S.qari) || QARI[0]; }
@@ -966,7 +985,7 @@ function audioUrls(i){
    - Ayat semasa & ayat BERIKUTNYA sahaja disimpan.
    - Bila berpindah ayat, audio lama dipadam, audio baharu (1 ayat ke hadapan)
      terus dimuat turun di latar belakang. */
-const AUDIO_CACHE = "tasmi-audio-v1";
+const AUDIO_CACHE = "tasmi-audio-v2";
 const preAudio = new Map();          // "surah:idx" -> Promise<objectURL|null>
 async function audioStore(){ try{ return await caches.open(AUDIO_CACHE); }catch(e){ return null; } }
 async function fetchAyahAudio(idx){
@@ -1113,7 +1132,8 @@ function wordAudioUrl(ayahIdx, tokenIdx){
     else w -= 4;
   }
   const p3 = n => String(n).padStart(3,"0");
-  return `https://audio.qurancdn.com/wbw/${p3(sur)}_${p3(ay)}_${p3(w)}.mp3`;
+  /* Versi URL mengelak respons audio lama/rosak daripada cache PWA terdahulu. */
+  return `https://audio.qurancdn.com/wbw/${p3(sur)}_${p3(ay)}_${p3(w)}.mp3?tasmi=3`;
 }
 /* Mainkan bacaan betul bagi SATU perkataan; jika gagal, baca dengan suara app */
 let wordSeq = 0;
@@ -1130,8 +1150,11 @@ function playWord(tokenIdx, ayahIdx){
   pauseMicAuto();
   stopAudio();
   if(!url){ speakArabic(tokShow); return; }
-  const a = new Audio(url);
+  const a = correctionAudio;
+  try{ a.pause(); a.currentTime = 0; }catch(e){}
+  a.src = url;
   a.preload = "auto";
+  a.volume = 1;
   a.playbackRate = safeRate();
   let settled = false;
   const fallback = ()=>{
@@ -1151,7 +1174,8 @@ function playWord(tokenIdx, ayahIdx){
   player = a; playingIdx = idx; playingWord = tokenIdx;
   const btn = $("listen"); if(btn) btn.innerHTML = '<span class="di">■</span><span class="dl">Henti</span>';
   setStatus(`Bacaan betul bagi perkataan: ${tokShow}`);
-  a.play().catch(()=>{ fallback(); });
+  const playPromise = a.play();
+  if(playPromise && playPromise.catch) playPromise.catch(()=>{ fallback(); });
 }
 /* Satukan semua permintaan pembetulan bagi perkataan yang sama kepada satu
    mainan audio penuh. Ini menghapuskan audio bertindih/tersangkut. */
@@ -1684,6 +1708,7 @@ function speakTranslation(done, wantIdx){
 /* ============ 8. PENGECAMAN SUARA (Web Speech API — PERCUMA) ============ */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let rec=null, mediaStream=null, rafId=null;
+let interimJudgeTimer = null;
 
 let ayahSeq = 0;
 function ayahComplete(){
@@ -2041,7 +2066,12 @@ async function startRec(){
   if(mediaStream){ mediaStream.getTracks().forEach(t=>t.stop()); mediaStream=null; }
   listening = true;
   rec = new SR();
-  rec.lang="ar-SA"; rec.continuous=true; rec.interimResults=true; rec.maxAlternatives=5;
+  rec.lang="ar-SA";
+  /* Chrome Android jauh lebih stabil dalam sesi pendek. continuous=true boleh
+     kekal menghantar interim tanpa keputusan akhir, menyebabkan bacaan salah
+     langsung tidak dinilai. Desktop kekal continuous untuk kelancaran. */
+  rec.continuous = !isMobile;
+  rec.interimResults=true; rec.maxAlternatives=5;
   let snaps = {};               // keadaan sebelum setiap segmen (interim boleh berubah-ubah)
   let gotAny = false;
   clearTimeout(watchdog);
@@ -2070,6 +2100,7 @@ async function startRec(){
      sedang membaca pembetulan) supaya mikrofon tidak pernah "mati" dan tiada
      bunyi bip mula/henti berulang daripada pelayar. */
   rec.onend=()=>{
+    clearTimeout(interimJudgeTimer);
     recRunning = false;
     if(!listening){ stopUI(); return; }          // pengguna sendiri menutup mic
     if(micMuted){ return; }                      // app sedang bercakap — resumeMicAuto akan sambung semula
@@ -2082,6 +2113,7 @@ async function startRec(){
      kami hanya memotong bahagian yang dituturkan semasa app bercakap, dan terus
      memproses bahagian BAHARU selepas itu. */
   let segCut = {};            // index segmen → bilangan aksara yang dipotong
+  let lastInterim = null;
   rec.onresult=(ev)=>{
     gotAny = true;
     if(micMuted || appSpeaking){
@@ -2120,6 +2152,9 @@ async function startRec(){
         }
       }
       if(!txt) continue;
+      /* Paparkan terus apa yang benar-benar diterima enjin. Ini juga memberi
+         maklum balas jelas bahawa mikrofon sedang berfungsi. */
+      $("heard").textContent = txt;
       // Teks interim sering DIKEMASKINI/DIBETULKAN oleh enjin, jadi setiap kali kita
       // ulang-semak keseluruhan segmen bermula daripada keadaan sebelum segmen ini.
       if(!snaps[i] || snaps[i].a !== aIdx) snaps[i] = { a:aIdx, cursor, marks: marks.slice() };
@@ -2127,6 +2162,24 @@ async function startRec(){
       processSpoken(txt, !!r.isFinal);
       keepProgress();
       if(r.isFinal) snaps[i] = { a:aIdx, cursor, marks: marks.slice() };
+      if(!r.isFinal){
+        /* Sesetengah Chrome Android tidak pernah menaik taraf interim kepada
+           final. Selepas suara stabil 850ms, nilai salinan terakhir sebagai
+           final supaya app WAJIB memberi keputusan betul atau salah. */
+        lastInterim = { i, txt, ayah:aIdx, snap:snaps[i] };
+        clearTimeout(interimJudgeTimer);
+        interimJudgeTimer = setTimeout(()=>{
+          const x = lastInterim;
+          if(!x || x.ayah !== aIdx || micMuted || appSpeaking) return;
+          if(x.snap && x.snap.a === aIdx){ cursor = x.snap.cursor; marks = x.snap.marks.slice(); }
+          processSpoken(x.txt, true);
+          keepProgress();
+          lastInterim = null;
+        }, 850);
+      } else {
+        lastInterim = null;
+        clearTimeout(interimJudgeTimer);
+      }
     }
   };
   recRunning = false;
@@ -2139,6 +2192,7 @@ function stopUI(){
   stopMeter();
 }
 function stopRec(){ listening=false; recRunning=false; micMuted=false; appSpeaking=false;
+  clearTimeout(interimJudgeTimer);
   stopVadWait();
   clearTimeout(muteTimer); clearTimeout(failSafeTimer); clearTimeout(watchdog); if(rec){ try{rec.stop();}catch(e){} } stopUI(); }
 
@@ -2183,6 +2237,9 @@ $("ayah-text").addEventListener("click", (e)=>{
   el.classList.add("play");
   playWord(i);            // satu klik = dengar perkataan itu sahaja
 });
+/* Buka saluran audio seawal sentuhan pertama. Ini penting pada Chrome/Safari
+   telefon, termasuk ketika pengguna menekan perkataan selepas mikrofon aktif. */
+document.addEventListener("pointerdown", unlockCorrectionAudio, { once:true, passive:true });
 $("ayah-text").addEventListener("dblclick", ()=> playAyah(aIdx));   // klik dua kali = dengar seluruh ayat
 $("surah").onchange = e => loadSurah(+e.target.value, 0);
 $("ayah").onchange = e => {
@@ -2593,6 +2650,7 @@ if("serviceWorker" in navigator && (location.protocol==="https:" || location.hos
   window.tasmiPrepare = prepare;
 
   $("mic").onclick = async ()=>{
+    unlockCorrectionAudio();
     try{ actx = actx || new (window.AudioContext||window.webkitAudioContext)(); actx.resume(); }catch(e){}
     if(window.speechSynthesis){ try{ speechSynthesis.resume(); }catch(e){} }
     if(typeof listening !== "undefined" && listening){ micAuto = false; stopRec(); return; }
