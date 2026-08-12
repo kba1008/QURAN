@@ -1057,6 +1057,13 @@ function scheduleWordCorrection(tokenIdx, delay){
     playWord(tokenIdx, targetAyah);
   }, (typeof delay === "number") ? delay : 0);
 }
+/* Batalkan sebarang pembetulan yang sedang menunggu (cth. bila pembaca
+   mengulang bacaan dari awal ayat). */
+function cancelWordCorrection(){
+  clearTimeout(correctionTimer);
+  correctionTimer = null;
+  lastCorrectionKey = ""; lastCorrectionAt = 0;
+}
 
 /* ============ 4c. AUTO MIC (jeda & sambung semula automatik) ============ */
 let micAuto = false;      // true bila mic dijeda oleh app sendiri
@@ -1606,6 +1613,31 @@ function processSpoken(text, isFinal){
     for(let j2=cursor-1;j2>=0;j2--){
       if(similar(spoken, target[j2]) >= TOL_BACK()){ already = j2; break; }
     }
+    /* ULANG DARI AWAL AYAT: pembaca menyebut semula perkataan pertama (atau
+       perkataan awal) ayat. App TIDAK boleh terus menghukum — ia mesti DENGAR
+       dahulu bacaan itu sehingga sampai semula ke perkataan bermasalah. */
+    if(already < 0 && cursor > 0 && similar(spoken, target[cursor]) < TOL()){
+      const lim = Math.min(cursor, target.length);
+      for(let j2=0;j2<lim;j2++){
+        if(similar(spoken, target[j2]) >= TOL()){ already = j2; break; }
+      }
+    }
+    /* Bila bacaan diulang: batalkan pembetulan yang menunggu dan KOSONGKAN
+       markah merah dari kedudukan itu ke hadapan supaya perkataan tersebut
+       dinilai semula secara adil apabila pembaca sampai kepadanya. */
+    if(already >= 0){
+      cancelWordCorrection();
+      drillWord = -1; badTries = 0;
+      let hadBad = false;
+      for(let k=already;k<marks.length;k++){
+        if(marks[k]==="bad"){ marks[k]=null; fixedOnce[k]=false; hadBad = true; }
+      }
+      if(hadBad) setStatus(already === 0
+        ? "Bacaan diulang dari awal ayat — app sedang mendengar, teruskan."
+        : "Bacaan diulang — app sedang mendengar, teruskan.");
+    }
+
+
 
     // MOD LATIH TUBI: perkataan sedang dibetulkan — wajib baca semula perkataan itu sahaja
     if(!S.freeFlow && S.drill && marks[cursor]==="bad"){
