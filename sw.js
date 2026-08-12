@@ -7,7 +7,7 @@
    - Data Al-Quran  : Stale-While-Revalidate (disimpan untuk kegunaan luar talian)
    - Audio bacaan   : Cache First (diuruskan juga oleh app: 1 ayat ke hadapan)
 */
-const VERSION = "v19";
+const VERSION = "v21";
 const SHELL = "tasmi-shell-" + VERSION;
 const FONTS = "tasmi-fonts-" + VERSION;
 const DATA = "tasmi-data-" + VERSION;
