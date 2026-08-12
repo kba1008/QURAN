@@ -108,6 +108,16 @@
   .w.bad{background:rgba(239,75,93,.18);color:#ff9aa5;box-shadow:inset 0 0 0 1px rgba(239,75,93,.4);animation:shake .3s}
   .w.cur{background:rgba(216,182,120,.16);box-shadow:inset 0 0 0 1px rgba(216,182,120,.45)}
   .w{cursor:pointer}
+  /* ===== Mod tulisan bersambung (seperti mushaf biasa) ===== */
+  .ayah.joined{word-spacing:.18em}
+  .ayah.joined .w{display:inline;padding:1px 2px;border-radius:8px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+  .ayah.joined .w.ok{box-shadow:none;background:rgba(47,191,113,.16)}
+  .ayah.joined .w.bad{box-shadow:none;background:rgba(239,75,93,.20)}
+  .ayah.joined .w.cur{box-shadow:none;background:rgba(216,182,120,.22);
+    border-bottom:2px solid var(--gold)}
+  /* ===== Mod tulisan dipecahkan mengikut perkataan ===== */
+  .ayah.split{word-spacing:normal;line-height:2.15}
+  .ayah.split .w{margin:3px 4px}
   .w.play{background:rgba(216,182,120,.32);box-shadow:inset 0 0 0 1px var(--gold);color:#fff5e0}
   .hint{margin-top:10px;font-size:12px;color:var(--muted)}
   @keyframes shake{25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
@@ -454,6 +464,14 @@
           <label>Saiz teks Al-Quran: <b id="size-val">32</b> px</label>
           <input type="range" id="set-size" min="20" max="64" step="2" />
         </div>
+        <div class="fld">
+          <label>Mod tulisan ayat</label>
+          <select id="set-textmode">
+            <option value="gabung">Ayat penuh bersambung (seperti tulisan Quran biasa)</option>
+            <option value="pecah">Dipecahkan mengikut perkataan</option>
+          </select>
+          <div class="hint">Mod bersambung: teks mengalir seperti mushaf. Terjemahan setiap perkataan hanya dipaparkan dalam mod dipecahkan.</div>
+        </div>
         <div class="switch"><span>Paparkan teks ayat</span><div class="tg" id="tg-showtext"></div></div>
         <div class="switch"><span>Warna hukum tajwid</span><div class="tg" id="tg-tajwid"></div></div>
         <div class="switch"><span>Kekalkan skrin menyala semasa membaca</span><div class="tg" id="tg-keepawake"></div></div>
@@ -477,7 +495,7 @@
           <div class="hint" id="dl-offline-st">Teks &amp; terjemahan semua 114 surah akan disimpan dalam telefon.</div>
         </div>
         <div class="fld">
-          <label>Ketegasan semakan (toleransi sebutan): <b id="tol-val">72</b>%</label>
+          <label>Ketegasan semakan (toleransi sebutan): <b id="tol-val">70</b>%</label>
           <input type="range" id="set-tol" min="50" max="95" step="1" />
         </div>
       </div>
@@ -743,10 +761,10 @@ const LS = {
 /* ============ 2. TETAPAN PER-PENGGUNA ============ */
 const DEFAULTS = {
   showText:true, showTrans:true, speakTrans:false, hafazan:false, strict:true,
-  repeat:3, size:40, tsize:21, rate:1, tol:80, voice:"",
+  repeat:3, size:40, tsize:21, rate:1, tol:70, voice:"",
   qari:"ar.alafasy", arate:1, autoFix:true, autoPlay:false,
   theme:"sky", tajwid:true, autoMic:true, mustCorrect:true, transDelay:1000, keepAwake:true,
-  drill:false, transPos:"ayat", freeFlow:false, wbw:true, hideHdr:true,
+  drill:false, transPos:"ayat", freeFlow:false, wbw:true, hideHdr:true, textMode:"gabung",
   sfx:false /* sentiasa senyap */, dsp:false, dspMobile:true
 
 };
@@ -1167,6 +1185,9 @@ function applySettings(){
   document.documentElement.style.setProperty("--ayah-size", S.size+"px");
   $("trans").style.fontSize = S.tsize+"px";
   $("ayah-text").classList.toggle("hidden-text", !S.showText);
+  const splitMode = (S.textMode === "pecah");
+  $("ayah-text").classList.toggle("split", splitMode);
+  $("ayah-text").classList.toggle("joined", !splitMode);
   $("trans").hidden = !S.showTrans;
   // Kedudukan terjemahan: bawah setiap ayat, atau di bahagian bawah sekali
   const bottom = (S.transPos === "bawah");
@@ -1258,7 +1279,8 @@ async function wbwFetch(){
 function render(){
   const w = ayahTokens(currentAyah());
   $("tj-key").hidden = !S.tajwid;
-  const gloss = wbwGet();
+  const splitMode = (S.textMode === "pecah");
+  const gloss = splitMode ? wbwGet() : null;
   $("ayah-text").innerHTML = w.map((t,i)=>{
     const cls = marks[i]==="ok"?"ok":marks[i]==="bad"?"bad":(i===cursor?"cur":"");
     const inner = (S.tajwid && !marks[i]) ? tajwidHTML(t, w[i+1]) : escHtml(t);
@@ -1859,6 +1881,9 @@ function initSettingsUI(){
   bindToggle("tg-automic","autoMic");
   bindToggle("tg-mustcorrect","mustCorrect");
   bindToggle("tg-drill","drill");
+  $("set-textmode").value = S.textMode || "gabung";
+  $("set-textmode").onchange = e => { S.textMode = e.target.value; saveSettings(); applySettings();
+    if(current){ render(); scrollToCursor(); } };
   $("set-transpos").value = S.transPos || "ayat";
   $("set-transpos").onchange = e => { S.transPos = e.target.value; saveSettings(); applySettings(); render(); };
 
