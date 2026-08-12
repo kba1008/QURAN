@@ -112,15 +112,6 @@
   .w.cur{background:rgba(216,182,120,.16);box-shadow:inset 0 0 0 1px rgba(216,182,120,.45)}
   .w{cursor:pointer}
   .w.play{background:rgba(216,182,120,.32);box-shadow:inset 0 0 0 1px var(--gold);color:#fff5e0}
-  /* ===== MOD MUSHAF: ayat bersambung penuh seperti tulisan Al-Quran standard ===== */
-  .ayah.mushaf{word-spacing:.06em;line-height:2.2;text-align:center}
-  .ayah.mushaf .w{display:inline;padding:0;margin:0;border-radius:6px;box-shadow:none;background:none}
-  .ayah.mushaf .w.ok{background:none;box-shadow:none;color:var(--green,#2fbf71)}
-  .ayah.mushaf .w.bad{background:rgba(239,75,93,.16);box-shadow:none;color:#ff9aa5;border-radius:6px}
-  .ayah.mushaf .w.cur{background:rgba(216,182,120,.22);box-shadow:none;border-radius:6px}
-  .ayah.mushaf .w.play{background:rgba(216,182,120,.34);box-shadow:none;color:#fff5e0}
-  .ayah.mushaf .wu{display:inline;margin:0}
-  .ayah.mushaf .wt{display:none}
   .hint{margin-top:10px;font-size:12px;color:var(--muted)}
   @keyframes shake{25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
   .w.again{animation:blinkok .7s ease-in-out 2}
@@ -469,14 +460,6 @@
           <label>Saiz teks Al-Quran: <b id="size-val">32</b> px</label>
           <input type="range" id="set-size" min="20" max="64" step="2" />
         </div>
-        <div class="fld">
-          <label>Mod paparan ayat Al-Quran</label>
-          <select id="set-ayahview">
-            <option value="mushaf">Mushaf — ayat penuh bersambung (standard)</option>
-            <option value="kata">Perkataan — dipecahkan satu-satu</option>
-          </select>
-          <div class="hint">Kedua-dua mod menyemak bacaan perkataan demi perkataan seperti biasa.</div>
-        </div>
         <div class="switch"><span>Paparkan teks ayat</span><div class="tg" id="tg-showtext"></div></div>
         <div class="switch"><span>Warna hukum tajwid</span><div class="tg" id="tg-tajwid"></div></div>
         <div class="switch"><span>Kekalkan skrin menyala semasa membaca</span><div class="tg" id="tg-keepawake"></div></div>
@@ -767,7 +750,7 @@ const DEFAULTS = {
   repeat:3, size:32, tsize:15, rate:1, tol:72, voice:"",
   qari:"ar.alafasy", arate:1, autoFix:true, autoPlay:false,
   theme:"emerald", tajwid:true, autoMic:true, mustCorrect:true, transDelay:1000, keepAwake:true,
-  drill:true, ayahView:"kata", transPos:"ayat", freeFlow:false, wbw:false, hideHdr:true,
+  drill:true, transPos:"ayat", freeFlow:false, wbw:false, hideHdr:true,
   sfx:false, silent:true, dsp:true, dspMobile:false
 
 };
@@ -1189,7 +1172,6 @@ function applySettings(){
   document.documentElement.style.setProperty("--ayah-size", S.size+"px");
   $("trans").style.fontSize = S.tsize+"px";
   $("ayah-text").classList.toggle("hidden-text", !S.showText);
-  $("ayah-text").classList.toggle("mushaf", (S.ayahView||"kata")==="mushaf");
   $("trans").hidden = !S.showTrans;
   // Kedudukan terjemahan: bawah setiap ayat, atau di bahagian bawah sekali
   const bottom = (S.transPos === "bawah");
@@ -1281,8 +1263,7 @@ async function wbwFetch(){
 function render(){
   const w = ayahTokens(currentAyah());
   $("tj-key").hidden = !S.tajwid;
-  const mushaf = (S.ayahView||"kata")==="mushaf";
-  const gloss = mushaf ? null : wbwGet();
+  const gloss = wbwGet();
   $("ayah-text").innerHTML = w.map((t,i)=>{
     const cls = marks[i]==="ok"?"ok":marks[i]==="bad"?"bad":(i===cursor?"cur":"");
     const inner = (S.tajwid && !marks[i]) ? tajwidHTML(t, w[i+1]) : escHtml(t);
@@ -1881,8 +1862,6 @@ function initSettingsUI(){
   bindToggle("tg-automic","autoMic");
   bindToggle("tg-mustcorrect","mustCorrect");
   bindToggle("tg-drill","drill");
-  $("set-ayahview").value = S.ayahView || "kata";
-  $("set-ayahview").onchange = e => { S.ayahView = e.target.value; saveSettings(); applySettings(); if(current) render(); };
   $("set-transpos").value = S.transPos || "ayat";
   $("set-transpos").onchange = e => { S.transPos = e.target.value; saveSettings(); applySettings(); render(); };
 
