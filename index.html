@@ -473,6 +473,11 @@
         <div class="switch"><span>Guna pemprosesan audio pada telefon (eksperimen)</span><div class="tg" id="tg-dspmobile"></div></div>
         <div class="switch"><span>Auto buka mikrofon selepas app habis bercakap</span><div class="tg" id="tg-automic"></div></div>
         <div class="fld">
+          <label>Simpanan luar talian</label>
+          <button class="btn" id="dl-offline" type="button">Muat turun semua surah untuk kegunaan luar talian</button>
+          <div class="hint" id="dl-offline-st">Teks &amp; terjemahan semua 114 surah akan disimpan dalam telefon.</div>
+        </div>
+        <div class="fld">
           <label>Ketegasan semakan (toleransi sebutan): <b id="tol-val">72</b>%</label>
           <input type="range" id="set-tol" min="50" max="95" step="1" />
         </div>
@@ -771,11 +776,45 @@ function lev(a,b){
     [p,c]=[c,p];}
   return p[n];
 }
+/* --- Peta fonetik: huruf yang HAMPIR SAMA BUNYI dianggap setara ---
+   Pengecaman suara pelayar sering keliru antara huruf tebal/nipis
+   (contoh: س/ص/ث, ت/ط, ذ/ز/ظ, ه/ح, ق/ك, ا/ع/ء, خ/غ, د/ض, ج/ز).
+   Kita bandingkan DUA cara: ejaan sebenar dan "kunci bunyi".
+   Jika kunci bunyi sepadan, bacaan dikira LULUS. */
+const PHONO = {
+  "\u0633":"s","\u0635":"s","\u062B":"s","\u0632":"s","\u0630":"s","\u0638":"s",
+  "\u062A":"t","\u0637":"t",
+  "\u062F":"d","\u0636":"d",
+  "\u0647":"h","\u062D":"h","\u062E":"h","\u063A":"h",
+  "\u0642":"k","\u0643":"k",
+  "\u0627":"a","\u0639":"a","\u0621":"a","\u0649":"a",
+  "\u0648":"w","\u064A":"y",
+  "\u0645":"m","\u0646":"n","\u0644":"l","\u0631":"r","\u0628":"b",
+  "\u0641":"f","\u062C":"j","\u0634":"c","\u0643":"k","\u06A9":"k","\u06CC":"y"
+};
+function phono(w){
+  let out = "";
+  for(const ch of (w||"")){
+    const m = PHONO[ch];
+    out += (m !== undefined) ? m : ch;
+  }
+  return out.replace(/(.)\1+/g,"$1");     // huruf berganda (sabdu/mad) disamakan
+}
+function ratio(a,b){
+  if(!a||!b) return 0;
+  if(a===b) return 1;
+  return 1 - lev(a,b)/Math.max(a.length,b.length,1);
+}
 function similar(a,b){
   if(!a||!b) return 0;
   if(a===b) return 1;
   const alt=a.replace(/^ال/,""), blt=b.replace(/^ال/,"");
-  return 1 - lev(alt,blt)/Math.max(alt.length,blt.length,1);
+  const direct = ratio(alt,blt);
+  const pa = phono(alt), pb = phono(blt);
+  if(pa === pb) return 1;                  // bunyi sama = lulus
+  // padanan bunyi diberi sedikit kelonggaran (huruf hampir sama sukar dikesan)
+  const sound = ratio(pa, pb) * 0.98 + 0.02;
+  return Math.max(direct, sound);
 }
 const TOL = () => S.tol/100;
 
@@ -805,7 +844,7 @@ const QARI = [
   {id:"ar.saoodshuraym",  name:"Saood Ash-Shuraym", ea:"Saood_ash-Shuraym_128kbps"},
   {id:"ar.abdulbasitmurattal", name:"Abdul Basit (Murattal)", ea:"Abdul_Basit_Murattal_192kbps"}
 ];
-let player = null, playingIdx = -1, playingWord = -1;
+let player = null, playingIdx = -1, playingWord = -1, playSeq = 0;
 let correctionTimer = null, lastCorrectionKey = "", lastCorrectionAt = 0;
 
 function qari(){ return QARI.find(q=>q.id===S.qari) || QARI[0]; }
@@ -821,6 +860,64 @@ function audioUrls(i){
     `https://everyayah.com/data/${q.ea}/${s}${a}.mp3`
   ];
 }
+/* ===== SIMPANAN AUDIO (auto muat turun 1 ayat ke hadapan) =====
+   - Ayat semasa & ayat BERIKUTNYA sahaja disimpan.
+   - Bila berpindah ayat, audio lama dipadam, audio baharu (1 ayat ke hadapan)
+     terus dimuat turun di latar belakang. */
+const AUDIO_CACHE = "tasmi-audio-v1";
+const preAudio = new Map();          // "surah:idx" -> Promise<objectURL|null>
+async function audioStore(){ try{ return await caches.open(AUDIO_CACHE); }catch(e){ return null; } }
+async function fetchAyahAudio(idx){
+  if(!current || idx < 0 || idx >= current.ayat.length) return null;
+  const urls = audioUrls(idx);
+  const c = await audioStore();
+  if(c){
+    for(const u of urls){
+      try{ const hit = await c.match(u); if(hit) return URL.createObjectURL(await hit.blob()); }catch(e){}
+    }
+  }
+  for(const u of urls){
+    try{
+      const r = await fetch(u, { mode:"cors" });
+      if(!r.ok) continue;
+      if(c){ try{ await c.put(u, r.clone()); }catch(e){} }
+      return URL.createObjectURL(await r.blob());
+    }catch(e){}
+  }
+  return null;
+}
+function preloadAyahAudio(idx){
+  if(!current || idx < 0 || idx >= current.ayat.length) return null;
+  const key = current.n+":"+idx+":"+S.qari;
+  if(!preAudio.has(key)) preAudio.set(key, fetchAyahAudio(idx));
+  return preAudio.get(key);
+}
+async function pruneAudio(keepIdx){
+  const keep = new Set();
+  [keepIdx, keepIdx+1].forEach(i=>{
+    if(current && i >= 0 && i < current.ayat.length) audioUrls(i).forEach(u=>keep.add(u));
+  });
+  for(const k of [...preAudio.keys()]){
+    const parts = k.split(":");
+    const i = +parts[1];
+    if(+parts[0] !== (current&&current.n) || parts[2] !== S.qari || (i !== keepIdx && i !== keepIdx+1)){
+      const pr = preAudio.get(k); preAudio.delete(k);
+      try{ const u = await pr; if(u) URL.revokeObjectURL(u); }catch(e){}
+    }
+  }
+  const c = await audioStore(); if(!c) return;
+  try{
+    for(const req of await c.keys()){ if(!keep.has(req.url)) await c.delete(req); }
+  }catch(e){}
+}
+/* Padam audio lama, kemudian muat turun ayat semasa + satu ayat ke hadapan */
+function syncAyahAudio(idx){
+  if(!current) return;
+  preloadAyahAudio(idx);
+  preloadAyahAudio(idx+1);
+  pruneAudio(idx);
+}
+
 function stopAudio(){
   if(player){ try{ player.pause(); }catch(e){} player = null; }
   playingIdx = -1; playingWord = -1;
@@ -828,15 +925,20 @@ function stopAudio(){
   const b = $("listen"); if(b) b.innerHTML = '<span class="di">▶</span><span class="dl">Dengar</span>';
 }
 /* Mainkan bacaan sebenar (rakaman qari) bagi ayat semasa */
-function playAyah(i, opts){
+async function playAyah(i, opts){
   opts = opts || {};
   const idx = (typeof i === "number") ? i : aIdx;
   pauseMicAuto();
   stopAudio();
-  const urls = audioUrls(idx);
+  const mySeq = ++playSeq;
+  let local = null;
+  try{ local = await preloadAyahAudio(idx); }catch(e){}
+  if(mySeq !== playSeq) return;                 // permintaan lain telah masuk
+  syncAyahAudio(idx);                           // sentiasa sedia 1 ayat ke hadapan
+  const urls = local ? [local].concat(audioUrls(idx)) : audioUrls(idx);
   let t = 0;
   const tryPlay = ()=>{
-    if(t >= urls.length){ setStatus("Audio bacaan tidak dapat dimuatkan. Sila semak sambungan internet."); return; }
+    if(t >= urls.length){ setStatus("Audio bacaan belum dimuat turun untuk ayat ini (perlukan internet sekali sahaja)."); return; }
     const a = new Audio(urls[t++]);
     a.preload = "auto";
     a.playbackRate = S.arate || 1;
@@ -1188,6 +1290,7 @@ function loadAyah(i,resetRep=true){
   $("surah").value = current.n;
   render();
   wbwFetch();
+  syncAyahAudio(aIdx);          // padam audio lama + muat turun 1 ayat ke hadapan
   saveResume();
   if(S.autoPlay) setTimeout(()=>playAyah(aIdx), 250);
 }
@@ -1588,7 +1691,7 @@ async function startRec(){
   if(mediaStream){ mediaStream.getTracks().forEach(t=>t.stop()); mediaStream=null; }
   listening = true;
   rec = new SR();
-  rec.lang="ar-SA"; rec.continuous=true; rec.interimResults=true; rec.maxAlternatives=1;
+  rec.lang="ar-SA"; rec.continuous=true; rec.interimResults=true; rec.maxAlternatives=5;
   let snaps = {};               // keadaan sebelum setiap segmen (interim boleh berubah-ubah)
   let gotAny = false;
   clearTimeout(watchdog);
@@ -1617,7 +1720,29 @@ async function startRec(){
     gotAny = true;
     if(micMuted) return;        // sedang memainkan audio contoh — abaikan gema
     for(let i=ev.resultIndex;i<ev.results.length;i++){
-      const r=ev.results[i], txt=(r[0].transcript||"").trim();
+      const r=ev.results[i];
+      /* Ambil alternatif TERBAIK: enjin memberi beberapa cadangan; kita pilih
+         yang paling hampir dengan ayat sasaran (huruf hampir sama bunyi
+         dikira lulus melalui fungsi similar()). */
+      let txt = (r[0].transcript||"").trim();
+      if(r.length > 1){
+        const tgt = ayahTokens(currentAyah()).map(stripD);
+        const scoreOf = (t)=>{
+          const ws = words(t); let sc = 0, c = cursor;
+          for(const w of ws){
+            let best = 0;
+            for(let k=0;k<3 && c+k<tgt.length;k++) best = Math.max(best, similar(w, tgt[c+k]));
+            sc += best; if(best >= TOL()) c++;
+          }
+          return ws.length ? sc/ws.length : 0;
+        };
+        let bestScore = scoreOf(txt);
+        for(let ai=1; ai<r.length; ai++){
+          const alt = (r[ai].transcript||"").trim(); if(!alt) continue;
+          const sc = scoreOf(alt);
+          if(sc > bestScore + 0.02){ bestScore = sc; txt = alt; }
+        }
+      }
       if(!txt) continue;
       // Teks interim sering DIKEMASKINI/DIBETULKAN oleh enjin, jadi setiap kali kita
       // ulang-semak keseluruhan segmen bermula daripada keadaan sebelum segmen ini.
@@ -1720,7 +1845,7 @@ function initSettingsUI(){
   $("set-voice").onchange = e => { S.voice = e.target.value; saveSettings(); };
   $("set-qari").innerHTML = QARI.map(q=>`<option value="${q.id}">${q.name}</option>`).join("");
   $("set-qari").value = S.qari;
-  $("set-qari").onchange = e => { S.qari = e.target.value; saveSettings(); stopAudio(); };
+  $("set-qari").onchange = e => { S.qari = e.target.value; saveSettings(); stopAudio(); syncAyahAudio(aIdx); };
   bindRange("set-arate","arate","arate-val",v=>v.toFixed(1));
   bindToggle("tg-autofix","autoFix");
   bindToggle("tg-freeflow","freeFlow", ()=>{ updateSkipBtn(); });
@@ -1840,6 +1965,35 @@ document.addEventListener("visibilitychange", ()=>{
 window.addEventListener("pagehide", saveResume);
 document.addEventListener("click", ()=>{ if(S.keepAwake && !_wl) syncWakeLock(); }, { passive:true });
 
+/* ============ 9b. MUAT TURUN SEMUA SURAH (LUAR TALIAN SEPENUHNYA) ============ */
+async function downloadAllSurah(){
+  const st = $("dl-offline-st"), btn = $("dl-offline");
+  let done = 0, fail = 0;
+  if(btn) btn.disabled = true;
+  for(let n=1;n<=114;n++){
+    const key = "tasmi.surah."+n;
+    const meta = SURAH_META.find(m=>m[0]===n);
+    let d = LS.get(key,null);
+    if(d && Array.isArray(d.ayat) && meta && d.ayat.length === meta[3]){ done++; }
+    else{
+      try{
+        const r = await fetch(`${API}/surah/${n}/editions/quran-uthmani,ms.basmeih`);
+        const j = await r.json();
+        const ar = j.data[0], msE = j.data[1];
+        LS.set(key, { n, name: ar.englishName, ayat: ar.ayahs.map(a=>a.text),
+                      nums: ar.ayahs.map(a=>a.number), ms: msE.ayahs.map(a=>a.text) });
+        done++;
+      }catch(e){ fail++; }
+    }
+    if(st) st.textContent = `Memuat turun… ${done}/114 surah selesai${fail?` (${fail} gagal)`:""}`;
+  }
+  if(btn) btn.disabled = false;
+  if(st) st.textContent = fail
+    ? `Selesai: ${done}/114 surah tersimpan. ${fail} gagal — cuba lagi bila internet stabil.`
+    : "Semua 114 surah tersimpan. App boleh digunakan sepenuhnya tanpa internet.";
+}
+(function bindOfflineBtn(){ const b = $("dl-offline"); if(b) b.onclick = downloadAllSurah; })();
+
 /* ============ 10. BOOT ============ */
 async function boot(){
   loadSettings();
@@ -1859,9 +2013,364 @@ async function boot(){
 boot();
 
 /* ============ 11. PWA ============ */
-if("serviceWorker" in navigator && location.protocol==="https:"){
+if("serviceWorker" in navigator && (location.protocol==="https:" || location.hostname==="localhost")){
   window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
 }
 </script>
+<!-- ============================================================
+     v15 — PERSIAPAN AUTO, PAPARAN TELEFON KEMAS, GURU PINTAR
+     ============================================================ -->
+<style>
+/* ---------- Susun atur telefon lebih kemas ---------- */
+.wrap{padding:14px 14px 190px}
+.card{border-radius:18px}
+#prep{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(150px + env(safe-area-inset-bottom));
+  z-index:60;background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--line);
+  border-radius:16px;padding:12px 14px;min-width:250px;max-width:calc(100vw - 32px);
+  box-shadow:0 26px 50px -26px rgba(0,0,0,.95);display:none}
+#prep.on{display:block;animation:prepIn .18s ease}
+@keyframes prepIn{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
+#prep .pt{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);margin-bottom:8px}
+#prep .ps{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--muted);padding:3px 0}
+#prep .ps b{width:16px;text-align:center;font-weight:700}
+#prep .ps.done{color:var(--text)}
+#prep .ps.fail{color:var(--red)}
+/* Bar carian + pemilih surah */
+#find{width:100%;margin-bottom:10px}
+.sel-row{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:10px}
+.sel-row select{min-width:0;width:100%}
+/* Kad guru */
+#guru{margin-top:12px;border:1px solid color-mix(in oklab,var(--gold) 32%,transparent);
+  background:color-mix(in oklab,var(--gold) 8%,transparent);border-radius:14px;padding:11px 13px;
+  font-size:13px;line-height:1.55;display:none}
+#guru.on{display:block}
+#guru .gh{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:4px}
+/* Chip statistik pantas */
+.qstats{display:flex;gap:8px;margin-top:12px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.qstats::-webkit-scrollbar{display:none}
+.qchip{flex:none;border:1px solid var(--line);background:var(--soft);border-radius:999px;
+  padding:7px 12px;font-size:11.5px;color:var(--muted);white-space:nowrap}
+.qchip b{color:var(--text);font-weight:800}
+/* Kelancaran: kurangkan kerja komposit pada telefon */
+.ayah,.trans{contain:content}
+.w{will-change:background-color}
+@media (max-width:640px){
+  .wrap{padding:12px 12px 186px}
+  header{padding:10px 12px;margin:0 -12px 12px}
+  .card{padding:14px}
+  .brand h1{font-size:16px}
+  .brand p{font-size:10px}
+  .meta{margin:14px 2px 8px}
+  .legend{gap:10px;font-size:10.5px}
+  .card::before{display:none}          /* kurang lapisan lukisan = lebih lancar */
+  .sheet-in{border-radius:20px 20px 0 0}
+  .qstats{margin-top:10px}
+}
+@media (max-width:640px){
+  #tj-key{display:flex !important;flex-wrap:nowrap;gap:10px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+  #tj-key::-webkit-scrollbar{display:none}
+  #tj-key > *{flex:none;white-space:nowrap}
+  .legend{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+  .legend::-webkit-scrollbar{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms !important;transition-duration:.01ms !important}}
+</style>
+
+<div id="prep" role="status" aria-live="polite">
+  <div class="pt">Menyediakan bacaan</div>
+  <div class="ps" id="prep-mic"><b>•</b><span>Kebenaran mikrofon</span></div>
+  <div class="ps" id="prep-aud"><b>•</b><span>Audio bacaan (2 ayat)</span></div>
+  <div class="ps" id="prep-voi"><b>•</b><span>Suara Bahasa Melayu</span></div>
+</div>
+
+<div class="sheet" id="st-sheet">
+  <div class="sheet-in">
+    <h2>Kemajuan &amp; Analisis Guru</h2>
+    <p class="sub">Rekod bacaan anda disimpan dalam telefon sahaja.</p>
+    <div id="st-body"></div>
+    <button class="btn-gold" id="st-close">Tutup</button>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   v15 — semua tambahan ditulis sebagai lapisan atas kod asal
+   ============================================================ */
+(function(){
+  const $ = id => document.getElementById(id);
+
+  /* ---------- 1. KELANCARAN: render disatukan dalam satu frame ---------- */
+  const _render = window.render;
+  let rafQ = false;
+  window.render = function(){
+    if(rafQ) return;
+    rafQ = true;
+    requestAnimationFrame(()=>{ rafQ = false; try{ _render(); }catch(e){} });
+  };
+
+  /* ---------- 2. PERSIAPAN AUTOMATIK BILA MIC DITEKAN ---------- */
+  const READY_KEY = "tasmi.ready.v1";
+  let prepping = false;
+
+  function step(id, state, txt){
+    const el = $(id); if(!el) return;
+    el.className = "ps" + (state ? " " + state : "");
+    el.querySelector("b").textContent = state === "done" ? "✓" : state === "fail" ? "✕" : "…";
+    if(txt) el.querySelector("span").textContent = txt;
+  }
+  function prepShow(on){ $("prep").classList.toggle("on", !!on); }
+
+  async function askMic(){
+    try{
+      const s = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true }});
+      s.getTracks().forEach(t=>t.stop());
+      return true;
+    }catch(e){ return false; }
+  }
+  async function micGranted(){
+    try{
+      const p = await navigator.permissions.query({ name:"microphone" });
+      return p.state === "granted";
+    }catch(e){ return false; }
+  }
+  async function ensureMalayVoice(){
+    if(!window.speechSynthesis) return false;
+    let vs = speechSynthesis.getVoices();
+    if(!vs.length){
+      await new Promise(r=>{ const t = setTimeout(r, 1500); speechSynthesis.onvoiceschanged = ()=>{ clearTimeout(t); r(); }; });
+      vs = speechSynthesis.getVoices();
+    }
+    const my = vs.find(v=>/^ms[-_]?MY/i.test(v.lang)) || vs.find(v=>/^ms/i.test(v.lang)) || vs.find(v=>/^id/i.test(v.lang));
+    if(my && (!S.voice || !vs.some(v=>v.name === S.voice))){
+      S.voice = my.name; saveSettings();
+      const sel = $("set-voice"); if(sel) try{ sel.value = my.name; }catch(e){}
+    }
+    try{ const u = new SpeechSynthesisUtterance(" "); u.volume = 0; u.lang = my ? my.lang : "ms-MY"; speechSynthesis.speak(u); }catch(e){}
+    return !!my;
+  }
+  async function ensureAudio(){
+    try{
+      const a = preloadAyahAudio(aIdx);
+      preloadAyahAudio(aIdx + 1);
+      const ok = await Promise.race([ a, new Promise(r=>setTimeout(()=>r("slow"), 5000)) ]);
+      return ok !== null;
+    }catch(e){ return false; }
+  }
+
+  async function prepare(){
+    if(prepping) return false;
+    prepping = true;
+    const fast = LS.get(READY_KEY, false) && await micGranted();
+    if(fast){
+      ensureAudio(); ensureMalayVoice();          // segarkan di latar belakang
+      prepping = false;
+      return true;
+    }
+    prepShow(true);
+    step("prep-mic","",""); step("prep-aud","",""); step("prep-voi","","");
+    const mic = await askMic();
+    step("prep-mic", mic ? "done" : "fail", mic ? "Mikrofon dibenarkan" : "Mikrofon tidak dibenarkan");
+    if(!mic){
+      setStatus("Sila benarkan akses mikrofon dalam tetapan pelayar, kemudian tekan mikrofon semula.");
+      setTimeout(()=>prepShow(false), 2600);
+      prepping = false; return false;
+    }
+    const aud = await ensureAudio();
+    step("prep-aud", aud ? "done" : "fail", aud ? "Audio bacaan sedia" : "Audio ditangguh (tiada internet)");
+    const voi = await ensureMalayVoice();
+    step("prep-voi", voi ? "done" : "fail", voi ? "Suara Bahasa Melayu sedia" : "Guna suara lalai telefon");
+    LS.set(READY_KEY, true);
+    setTimeout(()=>prepShow(false), 900);
+    prepping = false;
+    return true;
+  }
+  window.tasmiPrepare = prepare;
+
+  $("mic").onclick = async ()=>{
+    try{ actx = actx || new (window.AudioContext||window.webkitAudioContext)(); actx.resume(); }catch(e){}
+    if(window.speechSynthesis){ try{ speechSynthesis.resume(); }catch(e){} }
+    if(typeof listening !== "undefined" && listening){ micAuto = false; stopRec(); return; }
+    micAuto = false;
+    const ok = await prepare();
+    if(ok) startRec();
+  };
+
+  /* ---------- 3. GURU QURAN PINTAR ---------- */
+  const HURUF = {
+    "ا":"alif","ب":"ba","ت":"ta","ث":"tha (hujung lidah antara gigi)","ج":"jim","ح":"ha (halkum tengah)",
+    "خ":"kha (halkum atas)","د":"dal","ذ":"dzal (antara gigi)","ر":"ra","ز":"zai","س":"sin","ش":"syin",
+    "ص":"sod (tebal)","ض":"dhod (tepi lidah)","ط":"to (tebal)","ظ":"zo (tebal, antara gigi)",
+    "ع":"ain (halkum tengah)","غ":"ghain (halkum atas)","ف":"fa","ق":"qaf (pangkal lidah)","ك":"kaf",
+    "ل":"lam","م":"mim","ن":"nun","ه":"ha (halkum bawah)","و":"wau","ي":"ya","ء":"hamzah"
+  };
+  const guruEl = document.createElement("div");
+  guruEl.id = "guru";
+  guruEl.innerHTML = '<div class="gh">Guru</div><div class="gb"></div>';
+  const statusEl = $("status");
+  if(statusEl && statusEl.parentNode) statusEl.parentNode.insertBefore(guruEl, statusEl.nextSibling);
+
+  let guruTimer = null;
+  function guru(msg, ms){
+    const b = guruEl.querySelector(".gb");
+    b.innerHTML = msg;
+    guruEl.classList.add("on");
+    clearTimeout(guruTimer);
+    if(ms) guruTimer = setTimeout(()=>guruEl.classList.remove("on"), ms);
+  }
+  function guruOff(){ guruEl.classList.remove("on"); }
+
+  function diffLetters(spoken, target){
+    const a = stripD(spoken || ""), b = stripD(target || "");
+    const out = [];
+    const n = Math.max(a.length, b.length);
+    for(let i=0;i<n;i++){ if(a[i] !== b[i] && b[i] && /[\u0621-\u064A]/.test(b[i])) out.push(b[i]); }
+    return [...new Set(out)].slice(0,3);
+  }
+
+  /* Rekod kelemahan huruf untuk analisis */
+  function statsKey(){ return "tasmi.stats." + profile.toLowerCase().trim(); }
+  function getStats(){
+    return LS.get(statsKey(), { days:{}, ayat:0, ok:0, bad:0, letters:{}, streak:0, last:"" });
+  }
+  function setStats(s){ LS.set(statsKey(), s); }
+  function today(){ return new Date().toISOString().slice(0,10); }
+  function bump(fn){ const s = getStats(); fn(s); setStats(s); }
+  function markDay(){
+    bump(s=>{
+      const d = today();
+      s.days[d] = (s.days[d] || 0) + 1;
+      if(s.last !== d){
+        const y = new Date(Date.now() - 86400000).toISOString().slice(0,10);
+        s.streak = (s.last === y) ? (s.streak || 0) + 1 : 1;
+        s.last = d;
+      }
+    });
+  }
+
+  /* Pantau bacaan: beri nasihat makhraj bila tersekat pada perkataan yang sama */
+  const _processSpoken = window.processSpoken;
+  let lastHeardWord = "", stuckAt = -1, stuckN = 0;
+  window.processSpoken = function(text, isFinal){
+    const before = cursor;
+    const r = _processSpoken(text, isFinal);
+    const ws = words(text || "");
+    if(ws.length) lastHeardWord = ws[ws.length - 1];
+    if(isFinal){
+      const tgt = ayahTokens(currentAyah()).map(stripD);
+      if(cursor > before){
+        stuckAt = -1; stuckN = 0;
+        bump(s=>{ s.ok += (cursor - before); });
+        guruOff();
+      }else if(cursor < tgt.length){
+        stuckN = (stuckAt === cursor) ? stuckN + 1 : 1;
+        stuckAt = cursor;
+        bump(s=>{ s.bad += 1; });
+        if(stuckN >= 2){
+          const target = tgt[cursor] || "";
+          const ds = diffLetters(lastHeardWord, target);
+          const tips = ds.map(c=>`<b>${c}</b> — ${HURUF[c] || "sebut dengan jelas"}`).join("<br>");
+          bump(s=>{ ds.forEach(c=>{ s.letters[c] = (s.letters[c] || 0) + 1; }); });
+          guru(
+            (tips ? `Perhatikan makhraj:<br>${tips}<br>` : "") +
+            `Cuba sebut perlahan dan jelas. Tekan perkataan bertanda untuk dengar bacaan qari.`
+          );
+          if(stuckN >= 3 && S.autoFix) try{ playWord(cursor); }catch(e){}
+        }
+      }
+    }
+    return r;
+  };
+
+  /* Maklum balas selepas ayat selesai */
+  const _ayahComplete = window.ayahComplete;
+  window.ayahComplete = function(){
+    const total = marks.length || 1;
+    const okN = marks.filter(m=>m === "ok").length;
+    const pct = Math.round(okN / total * 100);
+    bump(s=>{ s.ayat += 1; });
+    markDay();
+    const msg = pct === 100 ? "Cemerlang! Bacaan ayat ini tepat sepenuhnya. Teruskan ke ayat berikutnya."
+      : pct >= 85 ? "Bagus. Hampir sempurna — ulang sekali lagi untuk memantapkan sebutan."
+      : "Teruskan berlatih. Dengar bacaan qari sekali, kemudian ulang ayat ini perlahan-lahan.";
+    guru(`Ketepatan ayat: <b>${pct}%</b><br>${msg}`, 8000);
+    renderQuick();
+    return _ayahComplete();
+  };
+
+  /* ---------- 4. CHIP KEMAJUAN PANTAS ---------- */
+  const quick = document.createElement("div");
+  quick.className = "qstats";
+  if(statusEl && statusEl.parentNode) statusEl.parentNode.insertBefore(quick, guruEl.nextSibling);
+  function renderQuick(){
+    const s = getStats();
+    const tot = s.ok + s.bad;
+    const acc = tot ? Math.round(s.ok / tot * 100) : 0;
+    quick.innerHTML = `
+      <span class="qchip">🔥 Streak <b>${s.streak || 0}</b> hari</span>
+      <span class="qchip">📖 Ayat <b>${s.ayat || 0}</b></span>
+      <span class="qchip">🎯 Ketepatan <b>${acc}%</b></span>
+      <span class="qchip">🗓️ Hari ini <b>${s.days[today()] || 0}</b> ayat</span>`;
+  }
+  renderQuick();
+
+  /* ---------- 5. SHEET ANALISIS ---------- */
+  const stBtn = document.createElement("button");
+  stBtn.className = "icon-btn"; stBtn.id = "st-open";
+  stBtn.setAttribute("aria-label","Kemajuan"); stBtn.textContent = "📊";
+  const hdrRight = document.querySelector(".hdr-right");
+  if(hdrRight) hdrRight.insertBefore(stBtn, $("open-set"));
+  function renderStats(){
+    const s = getStats();
+    const tot = s.ok + s.bad;
+    const acc = tot ? Math.round(s.ok / tot * 100) : 0;
+    const weak = Object.entries(s.letters || {}).sort((a,b)=>b[1]-a[1]).slice(0,6);
+    const days = Object.entries(s.days || {}).sort((a,b)=>a[0]<b[0]?1:-1).slice(0,7);
+    $("st-body").innerHTML = `
+      <div class="switch"><span>Jumlah ayat selesai</span><b>${s.ayat || 0}</b></div>
+      <div class="switch"><span>Ketepatan keseluruhan</span><b>${acc}%</b></div>
+      <div class="switch"><span>Hari berturut-turut</span><b>${s.streak || 0}</b></div>
+      <div class="grp" open><summary>Huruf perlu diperbaiki</summary><div class="grp-body">
+        ${weak.length ? weak.map(([c,n])=>`<div class="switch"><span>${c} — ${HURUF[c] || ""}</span><b>${n}×</b></div>`).join("")
+          : '<p class="sub">Belum ada rekod. Teruskan membaca.</p>'}
+      </div></div>
+      <div class="grp" open><summary>7 hari terakhir</summary><div class="grp-body">
+        ${days.length ? days.map(([d,n])=>`<div class="switch"><span>${d}</span><b>${n} ayat</b></div>`).join("")
+          : '<p class="sub">Belum ada rekod.</p>'}
+      </div></div>`;
+  }
+  stBtn.onclick = ()=>{ renderStats(); $("st-sheet").classList.add("open"); };
+  $("st-close").onclick = ()=> $("st-sheet").classList.remove("open");
+  $("st-sheet").onclick = e => { if(e.target.id === "st-sheet") $("st-sheet").classList.remove("open"); };
+
+  /* ---------- 6. CARIAN SURAH PANTAS ---------- */
+  const selRow = $("surah").parentNode;
+  selRow.classList.add("sel-row");
+  const find = document.createElement("input");
+  find.type = "text"; find.id = "find"; find.placeholder = "Cari surah (nama atau nombor)…";
+  find.autocomplete = "off";
+  selRow.parentNode.insertBefore(find, selRow);
+  find.addEventListener("input", ()=>{
+    const q = find.value.trim().toLowerCase();
+    if(!q) return;
+    const opt = [...$("surah").options].find(o =>
+      o.textContent.toLowerCase().includes(q) || o.value === q);
+    if(opt && +opt.value !== (current && current.n)) { $("surah").value = opt.value; }
+  });
+  find.addEventListener("change", ()=>{
+    const v = +$("surah").value;
+    if(v && (!current || v !== current.n)) loadSurah(v, 0);
+    find.value = "";
+  });
+  find.addEventListener("keydown", e=>{ if(e.key === "Enter"){ e.preventDefault(); find.blur(); find.dispatchEvent(new Event("change")); } });
+
+  /* ---------- 7. KEMAS PAPARAN SELEPAS TUKAR AYAT ---------- */
+  const _loadAyah = window.loadAyah;
+  window.loadAyah = function(i, resetRep){
+    guruOff(); stuckAt = -1; stuckN = 0;
+    return _loadAyah(i, resetRep);
+  };
+})();
+</script>
+
 </body>
 </html>
