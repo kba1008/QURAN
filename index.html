@@ -23,6 +23,18 @@
   }
   .ayah.fullpage .wo{ cursor:pointer; }
 
+  /* ==== BISMILLAH DIASINGKAN DARIPADA AYAT ==== */
+  .ayah .bsm-line{
+    display:block; text-align:center; font-size:.82em; line-height:2;
+    padding-bottom:.35em; margin-bottom:.45em; border-bottom:1px solid var(--line);
+  }
+  .ayah .ayah-line{ display:block; }
+  .ayah .ayah-line .ayno{
+    display:inline-block; font-family:Manrope,system-ui,sans-serif; font-size:.42em;
+    color:var(--gold); border:1px solid var(--line); border-radius:999px;
+    padding:0 .5em; margin:0 .4em; vertical-align:middle;
+  }
+
   :root{
     --bg:#0b1210; --panel:#111c19; --panel-2:#16241f;
     --line:rgba(255,255,255,.08);
@@ -1037,6 +1049,8 @@ function scheduleWordCorrection(tokenIdx, delay){
 
 /* ============ 4c. AUTO MIC (jeda & sambung semula automatik) ============ */
 let micAuto = false;      // true bila mic dijeda oleh app sendiri
+let recRunning = false;   // true bila sesi pengecaman benar-benar sedang berjalan
+let failSafeTimer = null; // jaring keselamatan: mic wajib hidup semula
 let micMuted = false;     // mikrofon dibisukan sementara (tanpa menutup pengecaman)
 let appSpeaking = false;  // true selagi app sedang membaca/membetulkan bacaan
 let muteTimer = null;
@@ -1044,27 +1058,42 @@ let muteTimer = null;
    semua hasil pengecaman DIABAIKAN sepenuhnya sehingga bacaan app habis. */
 function pauseMicAuto(){
   clearTimeout(muteTimer);
+  clearTimeout(failSafeTimer);
   micMuted = true;
   appSpeaking = true;
   /* JANGAN tutup sesi pengecaman — setiap kali sesi ditutup/dibuka, pelayar
      (Chrome Android) membunyikan "bib". Kami hanya membisukan trek mikrofon
      dan mengabaikan semua hasil pengecaman selagi app sedang bercakap. */
   if(mediaStream){ try{ mediaStream.getTracks().forEach(t=>t.enabled=false); }catch(e){} }
+  /* JARING KESELAMATAN: jika bacaan app tersangkut (onend/onerror tidak pernah
+     dipanggil), mikrofon mesti tetap hidup semula. */
+  failSafeTimer = setTimeout(()=>{ resumeMicAuto(0); }, 25000);
 }
 function resumeMicAuto(delay){
   clearTimeout(muteTimer);
+  clearTimeout(failSafeTimer);
   /* Hidupkan semula mikrofon SEPANTAS KILAT selepas pembetulan habis. */
   const d = (typeof delay === "number" && delay > 0) ? Math.min(delay, 120) : 60;
   muteTimer = setTimeout(()=>{
     micMuted = false;
     appSpeaking = false;
     if(mediaStream){ try{ mediaStream.getTracks().forEach(t=>t.enabled=true); }catch(e){} }
-    if(micAuto && S.autoMic && !listening){ try{ startRec(); }catch(e){} }
+    if(listening){
+      /* Sesi mungkin telah ditamatkan oleh pelayar semasa mic dibisukan —
+         mulakan semula serta-merta supaya bacaan pengguna terus didengar. */
+      if(!mediaStream) startMeter();
+      if(!recRunning) safeStartRec();
+      micUI(true);
+    } else if(micAuto && S.autoMic){
+      startRec();
+    }
     micAuto = false;
   }, d);
 }
-
-
+/* Pengawas: pastikan pengecaman TIDAK PERNAH mati selagi mic dihidupkan. */
+setInterval(()=>{
+  if(listening && !micMuted && !appSpeaking && !recRunning) safeStartRec();
+}, 1200);
 
 /* ============ 4d. WARNA HUKUM TAJWID (standard antarabangsa) ============ */
 const HARAKAT = "\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED";
@@ -1281,6 +1310,9 @@ function render(){
     return `<span class="wu">${word}<span class="wt">${escHtml(gloss[i]||"")}</span></span>`;
   }).join(" ");
 
+  const bsmSplit = (aIdx === 0 && current.n !== 1 && current.n !== 9 &&
+                    stripD(currentAyah()).startsWith(stripD(BISMILLAH)) && w.length > 4);
+
   if(fullPage){
     /* Seluruh surah dipaparkan seperti satu muka mushaf. Semakan bacaan kekal
        seperti biasa: hanya ayat semasa disemak perkataan demi perkataan. */
@@ -1295,8 +1327,21 @@ function render(){
       }
     }
     $("ayah-text").innerHTML = out;
+  } else if(bsmSplit){
+    /* Bismillah dipaparkan sebagai baris berasingan di atas ayat 1 (tanpa nombor),
+       ayat 1 pula dipaparkan dengan nombornya sendiri. */
+    const parts = w.map((t,i)=>{
+      const cls = marks[i]==="ok"?"ok":marks[i]==="bad"?"bad":(i===cursor?"cur":"");
+      const inner = (S.tajwid && !marks[i]) ? tajwidHTML(t, w[i+1]) : escHtml(t);
+      const word = `<span class="w ${cls}" data-i="${i}" role="button" tabindex="0" title="Tekan untuk dengar bacaan betul">${inner}</span>`;
+      if(!gloss) return word;
+      return `<span class="wu">${word}<span class="wt">${escHtml(gloss[i]||"")}</span></span>`;
+    });
+    $("ayah-text").innerHTML =
+      `<div class="bsm-line">${parts.slice(0,4).join(" ")}</div>` +
+      `<div class="ayah-line">${parts.slice(4).join(" ")}<span class="ayno">${aIdx+1}</span></div>`;
   } else {
-    $("ayah-text").innerHTML = wordsHTML;
+    $("ayah-text").innerHTML = `<div class="ayah-line">${wordsHTML}<span class="ayno">${aIdx+1}</span></div>`;
   }
 
   const done = marks.filter(m=>m==="ok").length;
@@ -1731,6 +1776,26 @@ function stopMeter(){
   if(mediaStream){ mediaStream.getTracks().forEach(t=>t.stop()); mediaStream=null; }
 }
 
+/* Mulakan semula sesi pengecaman dengan selamat (tanpa membuka sesi baharu
+   bertindih, yang menyebabkan ralat "already started" dan mic terus mati). */
+function safeStartRec(){
+  if(!rec || !listening || recRunning || micMuted) return;
+  try{ rec.start(); recRunning = true; }
+  catch(e){
+    try{ rec.stop(); }catch(_){}
+    setTimeout(()=>{
+      if(!rec || !listening || recRunning || micMuted) return;
+      try{ rec.start(); recRunning = true; }catch(_){}
+    }, 250);
+  }
+}
+function micUI(on){
+  $("mic").classList.toggle("on", !!on);
+  $("mic-wrap").classList.toggle("on", !!on);
+  $("state").textContent = on ? "Mendengar…" : "Sedia";
+  $("state").classList.toggle("live", !!on);
+}
+
 async function startRec(){
   if(!SR){ setStatus("Pelayar ini tidak menyokong pengecaman suara. Sila guna Chrome (Android/desktop) atau Safari 16+."); return; }
   // Minta kebenaran mikrofon dahulu supaya ralat jelas, kemudian LEPASKAN stream itu
@@ -1753,7 +1818,7 @@ async function startRec(){
     if(!gotAny && listening) setStatus("Belum ada suara dikesan. Sila baca lebih kuat dan dekat dengan mikrofon (perlu talian internet untuk pengecaman).");
   }, 8000);
   rec.onstart=()=>{
-    listening=true;
+    listening=true; recRunning=true;
     snaps = {};                 // PENTING: buang snapshot lama supaya kemajuan tidak berundur
     $("mic").classList.add("on"); $("mic-wrap").classList.add("on");
     $("state").textContent="Mendengar…"; $("state").classList.add("live");
@@ -1761,6 +1826,7 @@ async function startRec(){
   };
   rec.onerror=(e)=>{
     if(e.error==="no-speech" || e.error==="aborted") return;
+    if(e.error==="not-allowed" || e.error==="service-not-allowed"){ recRunning=false; }
     if(e.error==="not-allowed" || e.error==="service-not-allowed"){
       listening=false; stopUI();
       setStatus("Pengecaman suara disekat. Buka aplikasi dalam tab penuh dan benarkan mikrofon.");
@@ -1773,9 +1839,10 @@ async function startRec(){
      sedang membaca pembetulan) supaya mikrofon tidak pernah "mati" dan tiada
      bunyi bip mula/henti berulang daripada pelayar. */
   rec.onend=()=>{
-    if(!listening || micMuted){ stopUI(); return; }
-    try{ rec.start(); }
-    catch(e){ setTimeout(()=>{ if(listening && !micMuted){ try{ rec.start(); }catch(_){} } }, 80); }
+    recRunning = false;
+    if(!listening){ stopUI(); return; }          // pengguna sendiri menutup mic
+    if(micMuted){ return; }                      // app sedang bercakap — resumeMicAuto akan sambung semula
+    safeStartRec();
   };
 
   let skipUntil = 0;          // segmen yang dituturkan semasa app bercakap — buang
@@ -1817,7 +1884,8 @@ async function startRec(){
       if(r.isFinal) snaps[i] = { a:aIdx, cursor, marks: marks.slice() };
     }
   };
-  try{ rec.start(); }catch(e){ try{ rec.stop(); }catch(_){} }
+  recRunning = false;
+  safeStartRec();
   startMeter();
 }
 function stopUI(){
@@ -1825,13 +1893,21 @@ function stopUI(){
   $("state").textContent="Sedia"; $("state").classList.remove("live");
   stopMeter();
 }
-function stopRec(){ listening=false; clearTimeout(watchdog); if(rec){ try{rec.stop();}catch(e){} } stopUI(); }
+function stopRec(){ listening=false; recRunning=false; micMuted=false; appSpeaking=false;
+  clearTimeout(muteTimer); clearTimeout(failSafeTimer); clearTimeout(watchdog); if(rec){ try{rec.stop();}catch(e){} } stopUI(); }
 
 /* ============ 9. EVENT ============ */
 $("mic").onclick = ()=>{
   try{ (actx=actx||new (window.AudioContext||window.webkitAudioContext)()).resume(); }catch(e){}
   if(window.speechSynthesis){ try{ speechSynthesis.resume(); }catch(e){} }
-  if(listening){ micAuto=false; stopRec(); } else { micAuto=false; startRec(); }
+  micAuto=false;
+  if(listening && !recRunning){        // sesi tersangkut selepas app bercakap — hidupkan semula
+    micMuted=false; appSpeaking=false;
+    if(!mediaStream) startMeter();
+    safeStartRec(); micUI(true); setStatus("Mikrofon dihidupkan semula. Sila teruskan bacaan.");
+    return;
+  }
+  if(listening){ stopRec(); } else { startRec(); }
 };
 $("skip").onclick = ()=>{
   const t = ayahTokens(currentAyah());
