@@ -1758,15 +1758,36 @@ function bsmCount(){
   if(t.length <= 4) return 0;
   return stripD(t.slice(0,4).join(" ")) === stripD(BISMILLAH) ? 4 : 0;
 }
-/* Tandakan Bismillah sebagai lulus & letakkan kursor selepas halangan */
+/* Bismillah kini BOLEH & PERLU dibaca dahulu.
+   - Kursor bermula PADA Bismillah (tidak lagi dilangkau automatik).
+   - Bismillah tidak boleh sekali-kali ditandakan salah (merah).
+   - Selepas Bismillah selesai dibaca (atau dimaafkan kerana pembaca terus
+     mula ayat), ia menjadi halangan: kursor tidak boleh undur ke dalamnya. */
+function bsmSettled(){
+  const n = bsmCount();
+  if(!n) return true;
+  for(let i=0;i<n;i++) if(!isLocked(i)) return false;
+  return true;
+}
 function applyBsmBarrier(){
   const n = bsmCount();
-  // Bismillah bukan bacaan yang disemak: tandakan sebagai halangan ("bsm"),
-  // BUKAN "ok" — supaya ia tidak kelihatan hijau sebelum pengguna membaca.
-  for(let i=0;i<n;i++) if(marks[i] !== "ok") marks[i] = "bsm";
-  if(cursor < n) cursor = n;
-  return n;
+  if(!n) return 0;
+  for(let i=0;i<n;i++) if(marks[i] === "bad") marks[i] = null;  // jangan pernah merah
+  if(bsmSettled()){
+    if(cursor < n) cursor = n;
+    return n;                       // halangan aktif
+  }
+  return 0;                         // masih menunggu bacaan Bismillah
 }
+/* Pembaca terus mula ayat tanpa Bismillah — jangan tersangkut: tandakan
+   Bismillah sebagai dilangkau (neutral, bukan hijau) dan teruskan. */
+function forgiveBsm(){
+  const n = bsmCount();
+  if(!n) return;
+  for(let i=0;i<n;i++) if(!isLocked(i)) marks[i] = "bsm";
+  if(cursor < n) cursor = n;
+}
+
 
 /* ===== PENAMBAT FRASA (phrase anchoring) =====
    Al-Quran mempunyai banyak perkataan & frasa yang berulang. Oleh itu app TIDAK
@@ -1860,13 +1881,21 @@ function processSpoken(text, isFinal){
         return;
       }
       let firstBad = -1;
+      const bsmN = bsmCount();
       for(let w = Math.max(floor, AL.startWord); w < AL.advanceTo && w < target.length; w++){
         const sc = AL.wordScores[w];
         if(sc == null) continue;
         if(isLocked(w)) continue;                     // sudah hijau — jangan sentuh
         if(sc >= thr){ marks[w] = "ok"; }
-        else if(isFinal){ marks[w] = "bad"; if(firstBad < 0) firstBad = w; }
+        else if(isFinal && w >= bsmN){ marks[w] = "bad"; if(firstBad < 0) firstBad = w; }
       }
+      /* Pembaca terus mula ayat: maafkan Bismillah supaya bacaan tidak tersangkut */
+      if(bsmN && !bsmSettled()){
+        let startedAyah = false;
+        for(let w = bsmN; w < target.length; w++) if(marks[w] === "ok"){ startedAyah = true; break; }
+        if(startedAyah) forgiveBsm();
+      }
+
       for(const w of words(text)) pushHeard(w);
       let newCursor = Math.max(cursor, Math.min(AL.advanceTo, target.length));
       if(firstBad >= 0 && !S.freeFlow && (S.drill || S.mustCorrect)){
@@ -1908,8 +1937,15 @@ function processSpoken(text, isFinal){
        salah. App akan mendengar dahulu, mengenal pasti frasa itu daripada ayat
        mana / kedudukan mana, baru menyambung semakan. */
     pushHeard(spoken);
+    /* Masih di Bismillah tetapi pembaca terus mula ayat → maafkan Bismillah */
+    const bsmNs = bsmCount();
+    if(bsmNs && cursor < bsmNs && target[bsmNs] != null &&
+       similar(spoken, target[bsmNs]) >= TOL()){
+      forgiveBsm();
+    }
     let already = -1;
-    const al = alignBack(spoken, target, floor, cursor);
+    const al = alignBack(spoken, target, applyBsmBarrier(), cursor);
+
     if(al){
       if(al.sure) already = al.i;
       else {
@@ -1931,6 +1967,17 @@ function processSpoken(text, isFinal){
         : "Bacaan diulang — app sedang mendengar, teruskan.");
     }
 
+    /* Bismillah: sahkan bila betul, tetapi jangan sekali-kali tandakan merah */
+    if(bsmNs && cursor < bsmNs){
+      if(similar(spoken, target[cursor]) >= TOL()){
+        marks[cursor] = "ok"; cursor++; badTries = 0;
+        if(cursor >= bsmNs) setStatus("Bismillah selesai — teruskan bacaan ayat.");
+        continue;
+      }
+      cancelWordCorrection();
+      setStatus("Mulakan dengan bacaan Bismillah — app sedang mendengar.");
+      continue;
+    }
 
 
     // MOD LATIH TUBI: perkataan sedang dibetulkan — wajib baca semula perkataan itu sahaja
