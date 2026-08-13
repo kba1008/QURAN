@@ -7,7 +7,7 @@
    - Data Al-Quran  : Stale-While-Revalidate (disimpan untuk kegunaan luar talian)
    - Audio bacaan   : Cache First (diuruskan juga oleh app: 1 ayat ke hadapan)
 */
-const VERSION = "v22";
+const VERSION = "v23";
 const SHELL = "tasmi-shell-" + VERSION;
 const FONTS = "tasmi-fonts-" + VERSION;
 const DATA = "tasmi-data-" + VERSION;
@@ -118,4 +118,8 @@ self.addEventListener("fetch", (e) => {
   if (url.origin === location.origin) {
     e.respondWith(cacheFirst(req, SHELL).catch(() => caches.match(req, { ignoreVary: true })));
   }
+});
+
+self.addEventListener("message", (e) => {
+  if (e.data && e.data.type === "SKIP_WAITING") self.skipWaiting();
 });

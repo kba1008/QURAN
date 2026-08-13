@@ -1050,6 +1050,8 @@ async function playAyah(i, opts){
   const idx = (typeof i === "number") ? i : aIdx;
   pauseMicAuto();
   stopAudio();
+  unlockAudio();
+
   const mySeq = ++playSeq;
   let local = null;
   try{ local = await preloadAyahAudio(idx); }catch(e){}
@@ -1093,6 +1095,64 @@ function wordAudioUrl(ayahIdx, tokenIdx){
   const p3 = n => String(n).padStart(3,"0");
   return `https://audio.qurancdn.com/wbw/${p3(sur)}_${p3(ay)}_${p3(w)}.mp3`;
 }
+/* ---------- SOKONGAN AUDIO iPHONE / iPAD ----------
+   Safari iOS hanya membenarkan audio & suara bermula selepas sentuhan pengguna.
+   Kami "buka kunci" audio pada sentuhan pertama dan menggunakan SATU elemen
+   Audio yang sama berulang kali supaya bunyi pembetulan sentiasa keluar. */
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+let audioUnlocked = false, sharedAudio = null;
+function getSharedAudio(){
+  if(!sharedAudio){ sharedAudio = new Audio(); sharedAudio.preload = "auto"; sharedAudio.playsInline = true; }
+  return sharedAudio;
+}
+function unlockAudio(){
+  if(audioUnlocked) return;
+  audioUnlocked = true;
+  try{ actx = (typeof actx !== "undefined" && actx) ? actx : new (window.AudioContext||window.webkitAudioContext)(); actx.resume(); }catch(e){}
+  try{
+    const a = getSharedAudio();
+    a.src = "data:audio/mpeg;base64,SUQzBAAAAAABEVRYWFgAAAAtAAADY29tbWVudABCaWdTb3VuZEJhbmsuY29tIC8gTGFTb25vdGhlcXVlLm9yZwD/+xDEAAAAAAAAAAAAAAAAAAAAAABJbmZvAAAADwAAAAIAAAGGAKur////////////////////////////////////////////////////////////////AAAAAExhdmM1OC4xMwAAAAAAAAAAAAAAACQEAAAAAAAAAYYZM7cLAAAAAAAAAAAAAAAAAAAA//sQxAADwAABpAAAACAAADSAAAAETEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV";
+    a.volume = 0; const pr = a.play(); if(pr && pr.catch) pr.catch(()=>{});
+    setTimeout(()=>{ try{ a.pause(); a.volume = 1; }catch(e){} }, 60);
+  }catch(e){}
+  try{
+    if(window.speechSynthesis){
+      speechSynthesis.resume();
+      const u = new SpeechSynthesisUtterance(" "); u.volume = 0; speechSynthesis.speak(u);
+    }
+  }catch(e){}
+}
+["touchend","pointerdown","click"].forEach(ev=>
+  document.addEventListener(ev, unlockAudio, { once:false, capture:true, passive:true }));
+
+/* Sebut perkataan Arab menggunakan suara telefon — sandaran bila fail MP3 gagal
+   (biasa berlaku pada iPhone bila rangkaian menyekat CDN). */
+function speakArabicWord(text){
+  if(!text || !window.speechSynthesis) return false;
+  const vs = speechSynthesis.getVoices() || [];
+  const ar = vs.find(v=>/^ar/i.test(v.lang));
+  try{
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    if(ar) u.voice = ar;
+    u.lang = ar ? ar.lang : "ar-SA";
+    u.rate = Math.min(1, S.rate || 1);
+    u.onend = ()=>resumeMicAuto(0);
+    u.onerror = ()=>resumeMicAuto(0);
+    speechSynthesis.speak(u);
+  }catch(e){ return false; }
+  if(!ar) voiceHelpTip();
+  return true;
+}
+let voiceTipShown = false;
+function voiceHelpTip(){
+  if(voiceTipShown) return; voiceTipShown = true;
+  setStatus(isIOS
+    ? "Suara Arab belum dipasang. Buka Tetapan iPhone › Kebolehcapaian › Kandungan Lisan › Suara › Arabic untuk memuat turun suara."
+    : "Suara belum dipasang pada telefon. Muat turun pakej suara dalam Tetapan telefon › Bahasa & Input › Text-to-speech.");
+}
+
 /* Mainkan bacaan betul bagi SATU perkataan; jika gagal, main keseluruhan ayat */
 function playWord(tokenIdx, ayahIdx){
   const idx = (typeof ayahIdx === "number") ? ayahIdx : aIdx;
@@ -1104,16 +1164,29 @@ function playWord(tokenIdx, ayahIdx){
   if(!url){ playAyah(idx); return; }
   pauseMicAuto();
   stopAudio();
-  const a = new Audio(url);
+  unlockAudio();
+  /* iOS: guna semula elemen Audio yang sudah "dibuka kunci" oleh sentuhan pengguna */
+  const a = isIOS ? getSharedAudio() : new Audio();
+  a.src = url;
   a.preload = "auto";
+  a.playsInline = true;
   a.playbackRate = safeRate();
-  a.onerror = ()=>{ if(player===a){ player=null; playAyah(idx); } };
+  const tokTxt = ayahTokens(current.ayat[idx]||"")[tokenIdx] || "";
+  a.onerror = ()=>{
+    if(player !== a) return;
+    player = null;
+    if(!speakArabicWord(tokTxt)) playAyah(idx);   // sandaran: suara telefon, kemudian ayat penuh
+  };
   a.onended = ()=>{ stopAudio(); resumeMicAuto(0); };
   player = a; playingIdx = idx; playingWord = tokenIdx;
   const btn = $("listen"); if(btn) btn.innerHTML = '<span class="di">■</span><span class="dl">Henti</span>';
   const tok = ayahTokens(current.ayat[idx]||"")[tokenIdx] || "";
   setStatus(`Bacaan betul bagi perkataan: ${tok}`);
-  a.play().catch(()=>{});
+  a.play().catch(()=>{
+    if(player !== a) return;
+    player = null;
+    if(!speakArabicWord(tok)) playAyah(idx);      // iOS menyekat main auto — guna suara telefon
+  });
 }
 /* Satukan semua permintaan pembetulan bagi perkataan yang sama kepada satu
    mainan audio penuh. Ini menghapuskan audio bertindih/tersangkut. */
@@ -1286,6 +1359,10 @@ function keepProgress(){
 let watchdog=null;
 let drillWord=-1, drillAt=0;
 let badTries=0, fixedOnce={};
+/* Selepas pengguna mengulang perkataan yang sama LEBIH 3 kali, kemungkinan besar
+   ralat berpunca daripada mikrofon / pengecaman pelayar, bukan bacaan pengguna.
+   Maka bacaan itu DILULUSKAN supaya pembaca tidak tersangkut. */
+const MAX_TRIES = 3;
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 function setStatus(t){ $("status").textContent = t; }
@@ -1781,6 +1858,13 @@ function processSpoken(text, isFinal){
       if(!judge) continue;
       const bad = cursor;
       badTries++;
+      if(badTries > MAX_TRIES){
+        marks[cursor]="ok"; cursor++; drillWord=-1; badTries=0;
+        cancelWordCorrection();
+        setStatus("Diluluskan — mungkin ralat pengecaman suara, bukan bacaan anda. Teruskan bacaan.");
+        render();
+        continue;
+      }
       render();
       const now = Date.now();
       if(S.autoFix && now - drillAt > 900){
@@ -1832,7 +1916,15 @@ function processSpoken(text, isFinal){
       continue;
     }
 
-    if(marks[cursor] === "bad"){ badTries++; }
+    if(marks[cursor] === "bad"){
+      badTries++;
+      if(badTries > MAX_TRIES){
+        marks[cursor]="ok"; cursor++; drillWord=-1; badTries=0;
+        cancelWordCorrection();
+        setStatus("Diluluskan — mungkin ralat pengecaman suara, bukan bacaan anda. Teruskan bacaan.");
+        continue;
+      }
+    }
     if(marks[cursor] !== "bad"){
       marks[cursor]="bad";
       badTries = 1;
@@ -2376,10 +2468,97 @@ async function boot(){
 }
 boot();
 
-/* ============ 11. PWA ============ */
-if("serviceWorker" in navigator && (location.protocol==="https:" || location.hostname==="localhost")){
-  window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
-}
+/* ============ 11. PWA — PASANG DI TELEFON + KEMASKINI AUTOMATIK ============ */
+(function(){
+  const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+
+  /* --- a) Service Worker: sentiasa dapat versi terkini dengan segera --- */
+  if("serviceWorker" in navigator && (location.protocol==="https:" || location.hostname==="localhost")){
+    let reloading = false;
+    navigator.serviceWorker.addEventListener("controllerchange", ()=>{
+      if(reloading) return; reloading = true; location.reload();
+    });
+    window.addEventListener("load", async ()=>{
+      try{
+        const reg = await navigator.serviceWorker.register("./sw.js");
+        const check = ()=>{ try{ reg.update(); }catch(e){} };
+        setInterval(check, 30*60*1000);                                   // semak setiap 30 minit
+        document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) check(); });
+        reg.addEventListener("updatefound", ()=>{
+          const nw = reg.installing; if(!nw) return;
+          nw.addEventListener("statechange", ()=>{
+            if(nw.state === "installed" && navigator.serviceWorker.controller){
+              try{ setStatus("Versi baharu dipasang — app dimuat semula."); }catch(e){}
+              try{ nw.postMessage({ type:"SKIP_WAITING" }); }catch(e){}
+            }
+          });
+        });
+      }catch(e){}
+    });
+  }
+
+  if(standalone) return;   // sudah dipasang — tiada ajakan
+
+  /* --- b) Ajakan pasang automatik (Android/Chrome/Edge + panduan iPhone) --- */
+  const KEY = "tasmi-install-hide";
+  const hideUntil = Number(localStorage.getItem(KEY) || 0);
+  if(Date.now() < hideUntil) return;
+
+  const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  let deferred = null, shown = false;
+
+  const bar = document.createElement("div");
+  bar.id = "installBar";
+  bar.innerHTML = '<div class="ib-t">Pasang Tasmi\' di telefon anda</div>' +
+    '<div class="ib-s"></div>' +
+    '<div class="ib-b"><button class="ib-no" type="button">Nanti</button><button class="ib-go" type="button">Pasang</button></div>';
+  const css = document.createElement("style");
+  css.textContent = "#installBar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom));z-index:120;width:min(420px,calc(100vw - 24px));background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--line);border-radius:18px;padding:14px 16px;box-shadow:0 26px 50px -24px rgba(0,0,0,.95);display:none}"+
+    "#installBar.on{display:block;animation:prepIn .2s ease}"+
+    "#installBar .ib-t{font-weight:800;color:var(--gold);margin-bottom:4px}"+
+    "#installBar .ib-s{font-size:13px;color:var(--muted);line-height:1.45}"+
+    "#installBar .ib-b{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}"+
+    "#installBar button{border-radius:12px;padding:9px 16px;font-weight:700;font-size:13px;border:1px solid var(--line);background:transparent;color:var(--muted)}"+
+    "#installBar .ib-go{background:var(--gold);border-color:var(--gold);color:#0b1210}";
+  document.head.appendChild(css);
+  document.body.appendChild(bar);
+
+  const sub = bar.querySelector(".ib-s");
+  const goBtn = bar.querySelector(".ib-go");
+  function hide(days){
+    bar.classList.remove("on");
+    localStorage.setItem(KEY, String(Date.now() + (days||7)*864e5));
+  }
+  bar.querySelector(".ib-no").onclick = ()=>hide(7);
+
+  function show(){
+    if(shown) return; shown = true;
+    bar.classList.add("on");
+  }
+
+  window.addEventListener("beforeinstallprompt", (e)=>{
+    e.preventDefault(); deferred = e;
+    sub.textContent = "Pasang sekali sahaja — buka terus dari skrin utama, boleh guna tanpa internet dan sentiasa dikemas kini automatik.";
+    goBtn.hidden = false;
+    setTimeout(show, 2500);
+  });
+
+  goBtn.onclick = async ()=>{
+    if(!deferred){ hide(1); return; }
+    try{ deferred.prompt(); const r = await deferred.userChoice; if(r && r.outcome === "accepted") hide(3650); else hide(7); }
+    catch(e){ hide(7); }
+    deferred = null;
+  };
+
+  window.addEventListener("appinstalled", ()=>{ hide(3650); });
+
+  if(iOS){
+    sub.innerHTML = "Tekan butang <b>Kongsi</b> di bawah Safari, kemudian pilih <b>Tambah ke Skrin Utama</b>. App akan sentiasa dikemas kini automatik.";
+    goBtn.hidden = true;
+    setTimeout(show, 3000);
+  }
+})();
 </script>
 <!-- ============================================================
      v15 — PERSIAPAN AUTO, PAPARAN TELEFON KEMAS, GURU PINTAR
@@ -2543,6 +2722,7 @@ if("serviceWorker" in navigator && (location.protocol==="https:" || location.hos
     step("prep-aud", aud ? "done" : "fail", aud ? "Audio bacaan sedia" : "Audio ditangguh (tiada internet)");
     const voi = await ensureMalayVoice();
     step("prep-voi", voi ? "done" : "fail", voi ? "Suara Bahasa Melayu sedia" : "Guna suara lalai telefon");
+    if(!voi) voiceHelpTip();
     LS.set(READY_KEY, true);
     setTimeout(()=>prepShow(false), 900);
     prepping = false;
