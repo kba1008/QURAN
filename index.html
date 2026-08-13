@@ -135,6 +135,8 @@
   .w{padding:2px 8px;border-radius:10px;transition:background .18s ease,color .18s ease;display:inline-block}
   .w.ok{background:rgba(47,191,113,.18);box-shadow:inset 0 0 0 1px rgba(47,191,113,.35)}
   .w.skip{background:rgba(47,191,113,.18);box-shadow:inset 0 0 0 1px rgba(47,191,113,.35)}
+  /* Bismillah: halangan sahaja — bukan bacaan yang disemak, jadi tidak hijau */
+  .w.bsm{background:transparent;box-shadow:none;opacity:.72}
   .w.bad{background:rgba(239,75,93,.18);color:#ff9aa5;box-shadow:inset 0 0 0 1px rgba(239,75,93,.4);animation:shake .3s}
   .w.cur{background:rgba(216,182,120,.16);box-shadow:inset 0 0 0 1px rgba(216,182,120,.45)}
   .w{cursor:pointer}
@@ -1353,7 +1355,7 @@ let aIdx=0, cursor=0, marks=[], listening=false, repDone=0, busy=false;
    walaupun enjin pengecaman membetulkan/mengulang teksnya. */
 let bestCursor = 0, bestMarks = [];
 function keepProgress(){
-  for(let i=0;i<marks.length;i++) if(bestMarks[i]==="ok" || bestMarks[i]==="skip") marks[i]=bestMarks[i];
+  for(let i=0;i<marks.length;i++) if(bestMarks[i]==="ok" || bestMarks[i]==="skip" || bestMarks[i]==="bsm") marks[i]=bestMarks[i];
   bestMarks = marks.slice(); bestCursor = Math.max(bestCursor, cursor);
 }
 let watchdog=null;
@@ -1474,7 +1476,7 @@ function render(){
   const fullPage = !!S.fullPage;
   $("ayah-text").classList.toggle("fullpage", fullPage);
   const wordsHTML = w.map((t,i)=>{
-    const cls = marks[i]==="ok"?"ok":marks[i]==="skip"?"skip":marks[i]==="bad"?"bad":(i===cursor?"cur":"");
+    const cls = marks[i]==="ok"?"ok":marks[i]==="skip"?"skip":marks[i]==="bsm"?"bsm":marks[i]==="bad"?"bad":(i===cursor?"cur":"");
     const inner = (S.tajwid && marks[i] !== "bad") ? tajwidHTML(t, w[i+1]) : escHtml(t);
     const word = `<span class="w ${cls}" data-i="${i}" role="button" tabindex="0" title="Tekan untuk dengar bacaan betul">${inner}</span>`;
     if(!gloss) return word;
@@ -1502,7 +1504,7 @@ function render(){
     /* Bismillah dipaparkan sebagai baris berasingan di atas ayat 1 (tanpa nombor),
        ayat 1 pula dipaparkan dengan nombornya sendiri. */
     const parts = w.map((t,i)=>{
-      const cls = marks[i]==="ok"?"ok":marks[i]==="skip"?"skip":marks[i]==="bad"?"bad":(i===cursor?"cur":"");
+      const cls = marks[i]==="ok"?"ok":marks[i]==="skip"?"skip":marks[i]==="bsm"?"bsm":marks[i]==="bad"?"bad":(i===cursor?"cur":"");
       const inner = (S.tajwid && marks[i] !== "bad") ? tajwidHTML(t, w[i+1]) : escHtml(t);
       const word = `<span class="w ${cls}" data-i="${i}" role="button" tabindex="0" title="Tekan untuk dengar bacaan betul">${inner}</span>`;
       if(!gloss) return word;
@@ -1516,7 +1518,7 @@ function render(){
     $("ayah-text").innerHTML = `<div class="ayah-line">${wordsHTML}<span class="ayno">${aIdx+1}</span></div>`;
   }
 
-  const done = marks.filter(m=>m==="ok" || m==="skip").length;
+  const done = marks.filter(m=>m==="ok" || m==="skip" || m==="bsm").length;
   const pct = w.length? Math.round(done/w.length*100):0;
   $("score").textContent = pct+"%";
   $("prog").style.width = pct+"%";
@@ -1759,7 +1761,9 @@ function bsmCount(){
 /* Tandakan Bismillah sebagai lulus & letakkan kursor selepas halangan */
 function applyBsmBarrier(){
   const n = bsmCount();
-  for(let i=0;i<n;i++) marks[i] = "ok";
+  // Bismillah bukan bacaan yang disemak: tandakan sebagai halangan ("bsm"),
+  // BUKAN "ok" — supaya ia tidak kelihatan hijau sebelum pengguna membaca.
+  for(let i=0;i<n;i++) if(marks[i] !== "ok") marks[i] = "bsm";
   if(cursor < n) cursor = n;
   return n;
 }
@@ -1798,6 +1802,13 @@ function alignBack(spoken, target, floor, cursorNow){
 /* Semakan perkataan demi perkataan.
    isFinal=false (interim) → hanya tandakan yang BETUL supaya semakan nampak serta-merta.
    isFinal=true → tandakan juga yang salah. */
+/* Perkataan yang SUDAH hijau (betul/dilangkau/Bismillah) dikunci:
+   ia tidak boleh ditandakan salah lagi. Hanya perkataan yang belum dibaca
+   boleh dikesan salah & dibetulkan. */
+function isLocked(i){
+  const m = marks[i];
+  return m === "ok" || m === "skip" || m === "bsm";
+}
 function processSpoken(text, isFinal){
   if(!current) return;
   $("heard").textContent = text;
@@ -1812,14 +1823,47 @@ function processSpoken(text, isFinal){
   const ENG = (typeof window!=="undefined") ? window.QuranWasalEngine : null;
   const drillLock = (!S.freeFlow && (S.drill || S.mustCorrect) && marks[cursor]==="bad");
   if(ENG && ENG.alignReading && !drillLock && cursor < target.length){
-    const AL = ENG.alignReading(text, target, cursor, { floor });
-    const avgSc = AL ? (function(){ const v=Object.values(AL.wordScores||{}); return v.length ? v.reduce((a,b)=>a+b,0)/v.length : 0; })() : 0;
-    if(AL && AL.spokenChars >= 3 && AL.confidence >= 0.50 && avgSc >= 0.72 && AL.startWord <= cursor && AL.advanceTo > floor){
+    /* Pengguna sering MENGULANG beberapa perkataan hijau dahulu, kemudian
+       menyambung (wasal) ke perkataan yang belum dibaca. Jadi jendela undur
+       dibuka sehingga awal ayat (selepas Bismillah) supaya sambungan itu
+       dijajarkan dengan tepat mengikut hukum wasal/tajwid. */
+    const backSpan = Math.max(8, cursor - floor);
+    const AL = ENG.alignReading(text, target, cursor, { floor, back: backSpan });
+    /* Penilaian HANYA pada perkataan yang belum hijau. Perkataan hijau tetap
+       DIDENGAR (untuk menambat kedudukan bacaan bersambung) tetapi tidak
+       dinilai, tidak menaikkan atau menjatuhkan skor, dan tidak boleh salah. */
+    let sumU = 0, nU = 0, nL = 0;
+    if(AL){
+      for(const k in (AL.wordScores||{})){
+        const w = +k;
+        if(isLocked(w)) { nL++; continue; }
+        sumU += AL.wordScores[w]; nU++;
+      }
+    }
+    const avgNew = nU ? sumU / nU : 0;
+    const anchored = AL && (nL > 0 || AL.startWord <= cursor);
+    if(AL && AL.spokenChars >= 3 && AL.confidence >= 0.50 && anchored && AL.advanceTo > floor){
       const thr = Math.max(0.50, Math.min(0.88, TOL()));
+      /* Bacaan hanya menyentuh perkataan hijau (ulangan sebelum bersambung):
+         dengar sahaja, jangan tanda apa-apa dan jangan undurkan kursor. */
+      if(nU === 0){
+        for(const w of words(text)) pushHeard(w);
+        cancelWordCorrection();
+        setStatus("App mendengar ulangan bacaan anda — teruskan sambung ke perkataan seterusnya.");
+        render();
+        return;
+      }
+      if(avgNew < 0.72 && !isFinal){
+        for(const w of words(text)) pushHeard(w);
+        setStatus("App sedang mendengar sambungan bacaan…");
+        render();
+        return;
+      }
       let firstBad = -1;
       for(let w = Math.max(floor, AL.startWord); w < AL.advanceTo && w < target.length; w++){
         const sc = AL.wordScores[w];
         if(sc == null) continue;
+        if(isLocked(w)) continue;                     // sudah hijau — jangan sentuh
         if(sc >= thr){ marks[w] = "ok"; }
         else if(isFinal){ marks[w] = "bad"; if(firstBad < 0) firstBad = w; }
       }
@@ -1834,11 +1878,11 @@ function processSpoken(text, isFinal){
         setStatus("Teruskan bacaan — ada perkataan yang belum tepat.");
       } else {
         badTries = 0; drillWord = -1; cancelWordCorrection();
-        setStatus("Bacaan bersambung dikesan — teruskan.");
+        setStatus(nL > 0 ? "Sambungan bacaan dikesan — teruskan." : "Bacaan bersambung dikesan — teruskan.");
       }
       cursor = newCursor;
       render();
-      const okDone = m => m==="ok" || m==="skip";
+      const okDone = m => m==="ok" || m==="skip" || m==="bsm";
       const done = cursor >= target.length && marks.length &&
         (S.freeFlow ? marks.every(m=>m) : marks.every(okDone));
       if(done) ayahComplete();
@@ -1945,6 +1989,7 @@ function processSpoken(text, isFinal){
     /* --- MOD BEBAS: salah kekal merah, dibetulkan sekali sahaja, bacaan diteruskan --- */
     if(S.freeFlow){
       const bad = cursor;
+      if(isLocked(bad)){ cursor++; badTries=0; continue; }   // hijau: tiada semakan lagi
       marks[bad]="bad";
       cursor++;
       const first = !fixedOnce[bad];
@@ -1968,6 +2013,7 @@ function processSpoken(text, isFinal){
         continue;
       }
     }
+    if(isLocked(cursor)){ cursor++; badTries=0; continue; }  // hijau: tiada semakan lagi
     if(marks[cursor] !== "bad"){
       marks[cursor]="bad";
       badTries = 1;
@@ -1981,7 +2027,7 @@ function processSpoken(text, isFinal){
   }
 
   render();
-  const isDone = m => m==="ok" || m==="skip";
+  const isDone = m => m==="ok" || m==="skip" || m==="bsm";
   const finished = cursor >= target.length && marks.length &&
     (S.freeFlow ? marks.every(m=>m) : marks.every(isDone));
   if(finished) ayahComplete();
