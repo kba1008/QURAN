@@ -1805,6 +1805,49 @@ function processSpoken(text, isFinal){
   const sw = words(text);
   const floor = applyBsmBarrier();     // Bismillah: halangan, tidak disemak
 
+  /* ===== ENJIN PENJAJARAN ALIRAN FONEM (bacaan bersambung) =====
+     Seluruh bacaan yang didengar dijajarkan dengan aliran fonem ayat
+     (Smith–Waterman + kekeliruan akustik). Ini membolehkan bacaan laju
+     yang bersambung dikesan walaupun pelayar memecah/menggabung perkataan. */
+  const ENG = (typeof window!=="undefined") ? window.QuranWasalEngine : null;
+  const drillLock = (!S.freeFlow && (S.drill || S.mustCorrect) && marks[cursor]==="bad");
+  if(ENG && ENG.alignReading && !drillLock && cursor < target.length){
+    const AL = ENG.alignReading(text, target, cursor, { floor });
+    const avgSc = AL ? (function(){ const v=Object.values(AL.wordScores||{}); return v.length ? v.reduce((a,b)=>a+b,0)/v.length : 0; })() : 0;
+    if(AL && AL.spokenChars >= 3 && AL.confidence >= 0.50 && avgSc >= 0.72 && AL.startWord <= cursor && AL.advanceTo > floor){
+      const thr = Math.max(0.50, Math.min(0.88, TOL()));
+      let firstBad = -1;
+      for(let w = Math.max(floor, AL.startWord); w < AL.advanceTo && w < target.length; w++){
+        const sc = AL.wordScores[w];
+        if(sc == null) continue;
+        if(sc >= thr){ marks[w] = "ok"; }
+        else if(isFinal){ marks[w] = "bad"; if(firstBad < 0) firstBad = w; }
+      }
+      for(const w of words(text)) pushHeard(w);
+      let newCursor = Math.max(cursor, Math.min(AL.advanceTo, target.length));
+      if(firstBad >= 0 && !S.freeFlow && (S.drill || S.mustCorrect)){
+        newCursor = firstBad;                         // wajib betulkan dahulu
+        if(S.autoFix){ drillWord = firstBad; drillAt = Date.now(); }
+        setStatus("Bacaan hampir tepat — sila ulang perkataan merah itu.");
+      } else if(firstBad >= 0){
+        if(!fixedOnce[firstBad]){ fixedOnce[firstBad] = true; if(S.autoFix){ drillWord = firstBad; drillAt = Date.now(); } }
+        setStatus("Teruskan bacaan — ada perkataan yang belum tepat.");
+      } else {
+        badTries = 0; drillWord = -1; cancelWordCorrection();
+        setStatus("Bacaan bersambung dikesan — teruskan.");
+      }
+      cursor = newCursor;
+      render();
+      const okDone = m => m==="ok" || m==="skip";
+      const done = cursor >= target.length && marks.length &&
+        (S.freeFlow ? marks.every(m=>m) : marks.every(okDone));
+      if(done) ayahComplete();
+      return;
+    }
+  }
+
+
+
   for(let si=0; si<sw.length; si++){
     const spoken = sw[si];
     const judge = isFinal || si < sw.length-1;   // perkataan terakhir interim belum stabil

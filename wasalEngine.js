@@ -1,173 +1,286 @@
+/* =====================================================================
+   QuranWasalEngine v3 — "Continuous Phoneme Stream Alignment"
+   ---------------------------------------------------------------------
+   Pendekatan baharu (tidak bergantung kepada pemisahan perkataan STT):
+
+   1) Seluruh ayat ditukar menjadi SATU aliran fonem bersambung mengikut
+      hukum wasal/tajwid (nun sakinah, iqlab, idgham, alif-lam shamsiyah,
+      hamzah wasal, idgham mutamathilain, mad).
+   2) Bacaan pengguna juga ditukar menjadi aliran fonem — ruang dibuang
+      sepenuhnya, jadi kesilapan pelayar memecah/menggabung perkataan
+      tidak lagi menjejaskan semakan.
+   3) Kedua-dua aliran dijajarkan dengan Smith–Waterman (local alignment)
+      + affine gap + matriks kekeliruan akustik berpemberat. Ini seperti
+      penjajaran DNA: bacaan bersambung, mad panjang, sisipan/gugur huruf
+      semuanya dimaafkan secara berkadar, bukan lulus/gagal.
+   4) Setiap fonem sasaran tahu ia milik perkataan mana (peta owner),
+      jadi hasil penjajaran ditukar semula kepada skor setiap perkataan
+      dan kedudukan kursor baharu.
+   ===================================================================== */
+
 class QuranWasalEngine {
-  // 1. Kamus Ralat Akustik Browser (STT Confusable Mapping)
+  /* ---------- 1. Kekeliruan akustik (STT pelayar) ---------- */
   static acousticMap = {
     'ص': 'س', 'ث': 'س', 'ض': 'د', 'ظ': 'د', 'ذ': 'د',
     'ط': 'ت', 'ع': 'ا', 'ح': 'ه', 'خ': 'ه', 'ق': 'ك', 'غ': 'ر'
   };
 
-  // 2. Definisi Huruf Tajwid
+  /* Kelas bunyi: huruf dalam kelas sama = hampir betul (STT kerap tertukar) */
+  static classes = [
+    ['س','ص','ث','ز'], ['د','ض','ذ','ظ','ط','ت'], ['ك','ق'],
+    ['ه','ح','خ'], ['ا','ع','ء','ي','و'], ['ر','غ'], ['ن','م'],
+    ['ب','م'], ['ج','ش'], ['ل','ر'], ['ف','و']
+  ];
+  static _classIndex = null;
+  static classOf(ch) {
+    if (!this._classIndex) {
+      this._classIndex = {};
+      this.classes.forEach((grp, gi) => grp.forEach(c => {
+        (this._classIndex[c] = this._classIndex[c] || []).push(gi);
+      }));
+    }
+    return this._classIndex[ch] || [];
+  }
+  static nearSound(a, b) {
+    if (a === b) return true;
+    const A = this.classOf(a), B = this.classOf(b);
+    return A.some(g => B.includes(g));
+  }
+
   static hukum = {
     idghamBighunnah: ['ي', 'ن', 'م', 'و'],
     idghamBilaghunnah: ['ر', 'ل'],
     iqlab: ['ب'],
-    ikhfa: ['ت', 'ث', 'ج', 'د', 'ذ', 'ز', 'س', 'ش', 'ص', 'ض', 'ط', 'ظ', 'ف', 'ق', 'ك'],
-    shamsiyah: ['ت', 'ث', 'د', 'ذ', 'ر', 'ز', 'س', 'ش', 'ص', 'ض', 'ط', 'ظ', 'ل', 'ن']
+    ikhfa: ['ت','ث','ج','د','ذ','ز','س','ش','ص','ض','ط','ظ','ف','ق','ك'],
+    shamsiyah: ['ت','ث','د','ذ','ر','ز','س','ش','ص','ض','ط','ظ','ل','ن']
   };
 
-  // 3. Normalization (Membuang baris & memampatkan harakat panjang)
+  /* ---------- 2. Normalisasi ---------- */
   static normalize(text) {
     if (!text) return "";
-    let clean = text
-      .replace(/[\u064B-\u0652\u0670\u06D6-\u06ED]/g, "")
-      .replace(/[أإآءٱ]/g, "ا")
+    let clean = String(text)
+      .replace(/[\u064B-\u0652\u0670\u06D6-\u06ED\u06DF-\u06E8\u06EA-\u06ED]/g, "")
+      .replace(/[أإآءٱٲٳ]/g, "ا")
       .replace(/ى/g, "ي")
-      .replace(/ة/g, "ه") // Ta Marbutah sering didengar sebagai Ha waktu waqaf
-      .replace(/\u0640/g, "");
-    // Mampatkan vokal panjang (Madd) cth: جااااء -> جاء
-    return clean.replace(/(ا|و|ي)\1+/g, "$1").trim();
+      .replace(/ة/g, "ه")
+      .replace(/\u0640/g, "")
+      .replace(/[^\u0621-\u064A\s]/g, " ");
+    return clean.replace(/(ا|و|ي)\1+/g, "$1").replace(/\s+/g, " ").trim();
   }
 
-  // 4. Enjin Transmutasi Tajwid (G2P)
-  static generateWasalPhonetic(word1, word2, isWaqaf = false) {
-    let w1 = this.normalize(word1);
-    let w2 = this.normalize(word2);
-    if (!w1) return w2;
-    if (!w2) return w1;
-
-    let w1Chars = w1.split("");
-    let lastCharW1 = w1Chars[w1Chars.length - 1];
-    let firstCharW2 = w2.charAt(0);
-
-    // HUKUM WAQAF
-    if (isWaqaf && (word1.endsWith('ة') || word1.endsWith('ﺔ'))) {
-      return w1.slice(0, -1) + 'ه';
-    }
-
-    // HUKUM NUN MATI & TANWIN (ن)
-    if (lastCharW1 === "ن") {
-      let baseW1 = w1.slice(0, -1);
-      if (this.hukum.idghamBilaghunnah.includes(firstCharW2)) return `${baseW1}${firstCharW2} ${w2}`;
-      if (this.hukum.idghamBighunnah.includes(firstCharW2)) return `${baseW1}${firstCharW2} ${w2}`;
-      if (this.hukum.iqlab.includes(firstCharW2)) return `${baseW1}م ${w2}`;
-      if (this.hukum.ikhfa.includes(firstCharW2)) return `${baseW1}نغ ${w2}`; // Sengau/Nasal
-    }
-
-    // ALIF LAM SHAMSIYAH
-    if (w2.startsWith("ال") && w2.length > 2) {
-      let thirdChar = w2.charAt(2);
-      if (this.hukum.shamsiyah.includes(thirdChar)) return `${w1} ${thirdChar}${w2.slice(2)}`;
-    }
-
-    // HAMZAH WASAL
-    if (w2.startsWith("ا") && !w2.startsWith("ال")) return `${w1}${w2.slice(1)}`;
-
-    return `${w1} ${w2}`;
-  }
-
-  // 5. Acoustic Mapping (Memaafkan ralat pelayar)
   static mapAcoustics(text) {
     let mapped = text;
-    for (const [key, value] of Object.entries(this.acousticMap)) {
-      const regex = new RegExp(key, 'g');
-      mapped = mapped.replace(regex, value);
-    }
+    for (const [k, v] of Object.entries(this.acousticMap)) mapped = mapped.split(k).join(v);
     return mapped;
   }
 
-  // 6. Fuzzy Match dengan Acoustic Forgiveness
+  /* ---------- 3. Aliran fonem sasaran (dengan peta pemilik perkataan) ---------- */
+  /* Menghasilkan { seq: "…", owner: [idxPerkataan, …] } */
+  static buildStream(wordList, from, to) {
+    const seq = [];
+    const owner = [];
+    const push = (chars, wIdx) => {
+      for (const ch of chars) { seq.push(ch); owner.push(wIdx); }
+    };
+
+    for (let w = from; w < to; w++) {
+      let cur = this.normalize(wordList[w]).replace(/\s+/g, "");
+      if (!cur) continue;
+      const nextRaw = (w + 1 < to) ? this.normalize(wordList[w + 1]).replace(/\s+/g, "") : "";
+
+      /* Alif-lam shamsiyah pada perkataan SEMASA: ال + huruf syamsiah -> huruf digandakan */
+      if (cur.startsWith("ال") && cur.length > 2 && this.hukum.shamsiyah.includes(cur.charAt(2))) {
+        cur = (w === from ? "ا" : "") + cur.slice(2);
+      }
+      /* Hamzah wasal di tengah bacaan: gugur bila bersambung */
+      if (w > from && cur.startsWith("ا") && !cur.startsWith("ال") && cur.length > 1) {
+        cur = cur.slice(1);
+      }
+
+      if (nextRaw) {
+        const nx = nextRaw.charAt(0);
+        /* Nun sakinah / tanwin */
+        if (cur.endsWith("ن") && cur.length > 1) {
+          if (this.hukum.idghamBilaghunnah.includes(nx) || this.hukum.idghamBighunnah.includes(nx)) {
+            cur = cur.slice(0, -1);              // idgham: nun larut ke huruf seterusnya
+          } else if (this.hukum.iqlab.includes(nx)) {
+            cur = cur.slice(0, -1) + "م";        // iqlab
+          } else if (this.hukum.ikhfa.includes(nx)) {
+            cur = cur.slice(0, -1) + "ن";        // ikhfa: dengung ringan
+          }
+        }
+      }
+
+      /* Idgham mutamathilain: huruf akhir sama dengan huruf awal berikut */
+      if (seq.length && seq[seq.length - 1] === cur.charAt(0)) cur = cur.slice(1);
+
+      if (!cur) { push(this.normalize(wordList[w]).charAt(0) || "ا", w); continue; }
+      push(cur, w);
+    }
+    return { seq: seq.join(""), owner };
+  }
+
+  /* ---------- 4. Matriks skor ---------- */
+  static sub(a, b) {
+    if (a === b) return 2.2;
+    if (this.mapAcoustics(a) === this.mapAcoustics(b)) return 1.7;
+    if (this.nearSound(a, b)) return 1.0;
+    return -1.6;
+  }
+  static GAP_OPEN = -2.0;
+  static GAP_EXT = -0.45;              // mad / sisipan panjang murah
+
+  /* ---------- 5. Smith–Waterman (affine gap) ---------- */
+  static align(spoken, target) {
+    const n = spoken.length, m = target.length;
+    if (!n || !m) return null;
+    const NEG = -1e9;
+    // M = padanan, X = gap dalam target (sisipan pengguna), Y = gap dalam spoken (gugur)
+    let Mp = new Float64Array(m + 1), Xp = new Float64Array(m + 1), Yp = new Float64Array(m + 1);
+    Xp.fill(NEG); Yp.fill(NEG);
+    const ptr = new Uint8Array((n + 1) * (m + 1));   // 0 stop,1 diag,2 up(X),3 left(Y)
+    let best = 0, bi = 0, bj = 0;
+
+    for (let i = 1; i <= n; i++) {
+      const Mc = new Float64Array(m + 1), Xc = new Float64Array(m + 1), Yc = new Float64Array(m + 1);
+      Xc.fill(NEG); Yc.fill(NEG); Mc[0] = 0;
+      const sa = spoken.charAt(i - 1);
+      for (let j = 1; j <= m; j++) {
+        const s = this.sub(sa, target.charAt(j - 1));
+        const diag = Math.max(Mp[j - 1], Xp[j - 1], Yp[j - 1], 0) + s;
+        Mc[j] = Math.max(0, diag);
+        Xc[j] = Math.max(Mp[j] + this.GAP_OPEN, Xp[j] + this.GAP_EXT);      // makan huruf spoken
+        Yc[j] = Math.max(Mc[j - 1] + this.GAP_OPEN, Yc[j - 1] + this.GAP_EXT); // makan huruf target
+        let bestVal = Mc[j], code = 1;
+        if (Xc[j] > bestVal) { bestVal = Xc[j]; code = 2; }
+        if (Yc[j] > bestVal) { bestVal = Yc[j]; code = 3; }
+        if (bestVal <= 0) code = 0;
+        ptr[i * (m + 1) + j] = code;
+        if (Mc[j] > best) { best = Mc[j]; bi = i; bj = j; }
+      }
+      Mp = Mc; Xp = Xc; Yp = Yc;
+    }
+    if (!best) return null;
+
+    // Traceback ringkas untuk kutip padanan setiap posisi target
+    const matched = new Float64Array(m);
+    let i = bi, j = bj, startJ = bj;
+    let guard = (n + m) * 2;
+    while (i > 0 && j > 0 && guard-- > 0) {
+      const code = ptr[i * (m + 1) + j];
+      if (code === 0) break;
+      if (code === 1) {
+        const s = this.sub(spoken.charAt(i - 1), target.charAt(j - 1));
+        if (s > 0) matched[j - 1] = s / 2.2;
+        startJ = j; i--; j--;
+      } else if (code === 2) { i--; }
+      else { startJ = j; j--; }
+    }
+    return { score: best, endJ: bj, startJ: Math.max(1, startJ), matched };
+  }
+
+  /* ---------- 6. API utama: penjajaran bacaan bersambung ---------- */
+  /*  spokenText : teks mentah daripada STT (boleh banyak perkataan)
+      wordList   : array perkataan ayat (tanpa baris pun boleh)
+      cursor     : kedudukan semasa
+      opts.floor : had undur paling awal (cth. selepas Bismillah)          */
+  static alignReading(spokenText, wordList, cursor, opts = {}) {
+    const floor = Math.max(0, opts.floor || 0);
+    const spoken = this.normalize(spokenText).replace(/\s+/g, "");
+    if (spoken.length < 2 || !wordList || !wordList.length) return null;
+
+    const from = Math.max(floor, cursor - (opts.back == null ? 8 : opts.back));
+    const to = Math.min(wordList.length, cursor + (opts.ahead == null ? 24 : opts.ahead));
+    if (to <= from) return null;
+
+    const T = this.buildStream(wordList, from, to);
+    if (!T.seq) return null;
+
+    const al = this.align(spoken, T.seq);
+    if (!al) return null;
+
+    /* Skor setiap perkataan = purata padanan fonemnya */
+    const tot = {}, hit = {};
+    for (let k = 0; k < T.owner.length; k++) {
+      const w = T.owner[k];
+      tot[w] = (tot[w] || 0) + 1;
+      hit[w] = (hit[w] || 0) + (al.matched[k] || 0);
+    }
+    const startWord = T.owner[al.startJ - 1];
+    const endWord = T.owner[al.endJ - 1];
+
+    const wordScores = {};
+    for (let w = startWord; w <= endWord; w++) {
+      if (!tot[w]) continue;
+      wordScores[w] = hit[w] / tot[w];
+    }
+
+    /* Perkataan terakhir mungkin separuh dituturkan — jangan sahkan penuh */
+    const lastFull = wordScores[endWord] >= 0.75;
+    const advanceTo = lastFull ? endWord + 1 : endWord;
+
+    const covered = al.endJ - al.startJ + 1;
+    const confidence = Math.min(1, (al.score / (spoken.length * 2.2)) * 0.6 + (covered / Math.max(covered, spoken.length)) * 0.4);
+
+    return {
+      startWord, endWord, advanceTo, wordScores, confidence,
+      coveredChars: covered, spokenChars: spoken.length, score: al.score
+    };
+  }
+
+  /* ---------- 7. Keserasian API lama (index.html) ---------- */
+  static removeTashkeel(text) { return this.normalize(text); }
+
   static getSimilarityScore(s1, s2) {
-    let a = this.mapAcoustics(s1);
-    let b = this.mapAcoustics(s2);
-
-    if (a === b) return 1.0;
-    if (a.length === 0 || b.length === 0) return 0.0;
-
-    let matrix = Array(b.length + 1).fill().map(() => Array(a.length + 1).fill(0));
-    for (let i = 0; i <= b.length; i++) matrix[i][0] = i;
-    for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
-
+    const a = this.mapAcoustics(this.normalize(s1)).replace(/\s+/g, "");
+    const b = this.mapAcoustics(this.normalize(s2)).replace(/\s+/g, "");
+    if (a === b) return a ? 1 : 0;
+    if (!a.length || !b.length) return 0;
+    let prev = new Array(a.length + 1);
+    for (let j = 0; j <= a.length; j++) prev[j] = j;
     for (let i = 1; i <= b.length; i++) {
+      const cur = [i];
       for (let j = 1; j <= a.length; j++) {
-        let cost = b.charAt(i - 1) === a.charAt(j - 1) ? 0 : 1;
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j] + 1,
-          matrix[i][j - 1] + 1,
-          matrix[i - 1][j - 1] + cost
-        );
+        const cost = b.charAt(i - 1) === a.charAt(j - 1) ? 0 : (this.nearSound(b.charAt(i - 1), a.charAt(j - 1)) ? 0.4 : 1);
+        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
       }
+      prev = cur;
     }
-
-    let maxLength = Math.max(a.length, b.length);
-    return (maxLength - matrix[b.length][a.length]) / maxLength;
+    return Math.max(0, (Math.max(a.length, b.length) - prev[a.length]) / Math.max(a.length, b.length));
   }
+  static calculateSimilarity(a, b) { return this.getSimilarityScore(a, b); }
 
-  // 7. Omni-Matcher (Otak Utama - Dynamic Chunking & Backtracking)
-  static verifyReading(userSpokenText, currentIndex, wordList) {
-    const spoken = userSpokenText.replace(/\s+/g, " ").trim();
-
-    // BACKTRACKING: Jika pengguna ulang ayat sebelumnya (Ibtida')
-    if (currentIndex > 0) {
-      let prevWord = this.normalize(wordList[currentIndex - 1]);
-      if (this.getSimilarityScore(spoken, prevWord) >= 0.75) {
-        return { isCorrect: true, advanceBy: -1, mode: "IBTIDA_BACKTRACK" };
-      }
+  static generateWasalPhonetic(word1, word2, isWaqaf = false) {
+    if (isWaqaf || !word2) {
+      const w = this.normalize(word1);
+      return w;
     }
-
-    // DYNAMIC FORWARD CHUNKING: Uji 3, 2, dan 1 perkataan serentak
-    const maxWindow = Math.min(3, wordList.length - currentIndex);
-
-    for (let window = maxWindow; window >= 1; window--) {
-      let chunk = wordList.slice(currentIndex, currentIndex + window);
-
-      let tajweedChain = chunk[0];
-      for (let i = 1; i < chunk.length; i++) {
-        tajweedChain = this.generateWasalPhonetic(tajweedChain, chunk[i]);
-      }
-
-      let targetPhonetic = tajweedChain.replace(/\s+/g, "");
-      let spokenNoSpace = spoken.replace(/\s+/g, "");
-      let score = this.getSimilarityScore(spokenNoSpace, targetPhonetic);
-
-      if (score >= 0.72) {
-        let isWaqaf = (window === 1 && this.generateWasalPhonetic(chunk[0], "", true) === spokenNoSpace);
-        return {
-          isCorrect: true,
-          advanceBy: window,
-          mode: isWaqaf ? "WAQAF_MATCH" : `WASAL_${window}_WORDS`
-        };
-      }
-    }
-
-    return { isCorrect: false, advanceBy: 0, mode: "FAILED" };
-  }
-  // 8. LAPISAN KESERASIAN (API lama yang dipanggil oleh index.html)
-  //    Tanpa method ini, index.html melontar TypeError pada perkataan pertama
-  //    lalu semakan bacaan terhenti terus.
-  static removeTashkeel(text) {
-    return this.normalize(text);
-  }
-
-  static calculateSimilarity(a, b) {
-    return this.getSimilarityScore(this.normalize(a), this.normalize(b));
+    const st = this.buildStream([word1, word2], 0, 2);
+    return st.seq;
   }
 
   static wasalVariants(word1, word2) {
-    const w1 = this.normalize(word1);
-    const w2 = this.normalize(word2);
-    const out = [
-      `${w1} ${w2}`,
-      `${w1}${w2}`,
-      this.generateWasalPhonetic(word1, word2),
-      this.generateWasalPhonetic(word1, word2, true)
-    ];
+    const w1 = this.normalize(word1), w2 = this.normalize(word2);
+    const out = [`${w1} ${w2}`, `${w1}${w2}`, this.generateWasalPhonetic(word1, word2)];
     return [...new Set(out.map(v => (v || "").replace(/\s+/g, " ").trim()).filter(Boolean))];
+  }
+
+  /* Kekal untuk keserasian: pengesahan pendek berasaskan penjajaran */
+  static verifyReading(userSpokenText, currentIndex, wordList) {
+    const r = this.alignReading(userSpokenText, wordList, currentIndex, { back: 2, ahead: 6 });
+    if (!r || r.confidence < 0.5) return { isCorrect: false, advanceBy: 0, mode: "FAILED" };
+    const adv = r.advanceTo - currentIndex;
+    if (adv <= 0) {
+      return r.startWord < currentIndex
+        ? { isCorrect: true, advanceBy: r.startWord - currentIndex, mode: "IBTIDA_BACKTRACK" }
+        : { isCorrect: false, advanceBy: 0, mode: "FAILED" };
+    }
+    return { isCorrect: true, advanceBy: adv, mode: `WASAL_${adv}_WORDS` };
   }
 }
 
-
-// Export support untuk ES6 / Browser
 if (typeof module !== "undefined" && module.exports) {
   module.exports = QuranWasalEngine;
-} else {
+} else if (typeof window !== "undefined") {
   window.QuranWasalEngine = QuranWasalEngine;
 }
