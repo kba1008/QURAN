@@ -1061,8 +1061,8 @@ async function playAyah(i, opts){
   let t = 0;
   const tryPlay = ()=>{
     if(t >= urls.length){ setStatus("Audio bacaan belum dimuat turun untuk ayat ini (perlukan internet sekali sahaja)."); return; }
-    const a = new Audio(urls[t++]);
-    a.preload = "auto";
+    const a = newPlayer(); a.src = urls[t++];
+    a.preload = "auto"; a.playsInline = true;
     a.playbackRate = safeRate();
     a.onerror = ()=>{ if(player===a){ tryPlay(); } };
     a.onended = ()=>{ stopAudio(); if(opts.onend) opts.onend(); resumeMicAuto(0); };
@@ -1106,6 +1106,12 @@ function getSharedAudio(){
   if(!sharedAudio){ sharedAudio = new Audio(); sharedAudio.preload = "auto"; sharedAudio.playsInline = true; }
   return sharedAudio;
 }
+function newPlayer(){
+  /* iOS: hanya elemen Audio yang telah dibuka kunci oleh sentuhan pengguna
+     dibenarkan berbunyi, jadi kita guna semula elemen yang sama. */
+  if(isIOS){ const a = getSharedAudio(); try{ a.pause(); }catch(e){} return a; }
+  return new Audio();
+}
 function unlockAudio(){
   if(audioUnlocked) return;
   audioUnlocked = true;
@@ -1140,10 +1146,30 @@ function speakArabicWord(text){
     u.rate = Math.min(1, S.rate || 1);
     u.onend = ()=>resumeMicAuto(0);
     u.onerror = ()=>resumeMicAuto(0);
-    speechSynthesis.speak(u);
+    /* iOS: cancel() diikuti speak() serta-merta selalunya gagal — beri jeda. */
+    safeSpeak(u);
   }catch(e){ return false; }
   if(!ar) voiceHelpTip();
   return true;
+}
+/* Hantar utterance dengan selamat: iOS perlu speechSynthesis.resume() dan
+   sedikit jeda selepas cancel(), dan kadang-kadang enjin tersangkut — kita
+   cuba semula sekali sebelum menyerah supaya mic tidak tergantung. */
+function safeSpeak(u){
+  let started = false, tries = 0;
+  const origStart = u.onstart;
+  u.onstart = (e)=>{ started = true; if(origStart) origStart(e); };
+  const fire = ()=>{
+    tries++;
+    try{ speechSynthesis.resume(); }catch(e){}
+    try{ speechSynthesis.speak(u); }catch(e){}
+    setTimeout(()=>{
+      if(started || tries >= 2) return;
+      try{ speechSynthesis.cancel(); }catch(e){}
+      setTimeout(fire, 120);
+    }, 1600);
+  };
+  setTimeout(fire, isIOS ? 260 : 0);
 }
 let voiceTipShown = false;
 function voiceHelpTip(){
@@ -1232,6 +1258,16 @@ function pauseMicAuto(){
      (Chrome Android) membunyikan "bib". Kami hanya membisukan trek mikrofon
      dan mengabaikan semua hasil pengecaman selagi app sedang bercakap. */
   if(mediaStream){ try{ mediaStream.getTracks().forEach(t=>t.enabled=false); }catch(e){} }
+  /* iPhone/iPad: selagi sesi pengecaman & mikrofon masih terbuka, iOS mengunci
+     laluan audio dalam mod RAKAMAN — semua audio pembetulan dan terjemahan
+     jadi senyap. Jadi pada iOS kita TUTUP mic sepenuhnya sementara app bercakap. */
+  if(isIOS){
+    try{ if(rec) rec.abort(); }catch(e){}
+    recRunning = false;
+    try{ if(mediaStream){ mediaStream.getTracks().forEach(t=>t.stop()); mediaStream = null; } }catch(e){}
+    try{ if(rafId) cancelAnimationFrame(rafId); }catch(e){}
+    try{ if(typeof actx !== "undefined" && actx && actx.suspend) actx.suspend(); }catch(e){}
+  }
   /* JARING KESELAMATAN: jika bacaan app tersangkut (onend/onerror tidak pernah
      dipanggil), mikrofon mesti tetap hidup semula. */
   failSafeTimer = setTimeout(()=>{ resumeMicAuto(0); }, 25000);
@@ -1240,11 +1276,13 @@ function resumeMicAuto(delay){
   clearTimeout(muteTimer);
   clearTimeout(failSafeTimer);
   /* Hidupkan semula mikrofon SEPANTAS KILAT selepas pembetulan habis. */
-  const d = (typeof delay === "number" && delay > 0) ? Math.min(delay, 120) : 60;
+  let d = (typeof delay === "number" && delay > 0) ? Math.min(delay, 120) : 60;
+  if(isIOS) d = Math.max(d, 350);   // iOS perlu masa menukar semula ke mod rakaman
   muteTimer = setTimeout(()=>{
     micMuted = false;
     appSpeaking = false;
     if(mediaStream){ try{ mediaStream.getTracks().forEach(t=>t.enabled=true); }catch(e){} }
+    if(isIOS){ try{ if(typeof actx !== "undefined" && actx && actx.resume) actx.resume(); }catch(e){} }
     if(listening){
       /* Sesi mungkin telah ditamatkan oleh pelayar semasa mic dibisukan —
          mulakan semula serta-merta supaya bacaan pengguna terus didengar. */
@@ -1657,13 +1695,24 @@ function loadVoices(){
 function pickVoice(){
   if(S.voice){ const v = voices.find(x=>x.name===S.voice); if(v) return v; }
   return voices.find(v=>/^ms-MY/i.test(v.lang)) || voices.find(v=>/^ms/i.test(v.lang))
-      || voices.find(v=>/^id/i.test(v.lang)) || null;
+      || voices.find(v=>/^id/i.test(v.lang))
+      /* iPhone selalunya tiada suara Melayu — guna suara lalai peranti supaya
+         terjemahan tetap dibaca (bukan senyap). */
+      || (isIOS ? (voices.find(v=>/^en/i.test(v.lang)) || voices[0] || null) : null)
+      || null;
 }
 
 let speakSeq = 0;                 // token: batalkan bacaan terjemahan yang sudah luput
 function cancelTranslation(){
   speakSeq++;
   try{ if(window.speechSynthesis) speechSynthesis.cancel(); }catch(e){}
+}
+let transTipShown = false;
+function voiceHelpTipTrans(){
+  if(transTipShown) return; transTipShown = true;
+  setStatus(isIOS
+    ? "Suara Bahasa Melayu belum dipasang. Tetapan iPhone › Kebolehcapaian › Kandungan Lisan › Suara › Bahasa Melayu — muat turun sekali sahaja."
+    : "Suara Bahasa Melayu belum dipasang. Tetapan telefon › Bahasa & Input › Text-to-speech › muat turun Bahasa Melayu.");
 }
 function speakTranslation(done, wantIdx){
   const idxT = (typeof wantIdx === "number") ? wantIdx : aIdx;
@@ -1711,7 +1760,12 @@ function speakTranslation(done, wantIdx){
     done && done();
   };
   u.onend = finish; u.onerror = finish;
-  speechSynthesis.speak(u);
+  const v2 = pickVoice();
+  if(!v2 || !/^ms|^id/i.test(v2.lang || "")) voiceHelpTipTrans();
+  safeSpeak(u);
+  /* Jaring keselamatan: jika enjin suara langsung tidak berbunyi (biasa di
+     iOS bila tiada suara dipasang), teruskan supaya app tidak tergantung. */
+  setTimeout(()=>{ if(!finished && !speechSynthesis.speaking) finish(); }, 3200);
 }
 
 /* ============ 8. PENGECAMAN SUARA (Web Speech API — PERCUMA) ============ */
