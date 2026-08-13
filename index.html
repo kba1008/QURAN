@@ -1400,7 +1400,8 @@ let badTries=0, fixedOnce={};
 /* Selepas pengguna mengulang perkataan yang sama LEBIH 3 kali, kemungkinan besar
    ralat berpunca daripada mikrofon / pengecaman pelayar, bukan bacaan pengguna.
    Maka bacaan itu DILULUSKAN supaya pembaca tidak tersangkut. */
-const MAX_TRIES = 3;
+const MAX_TRIES = 4;   // selepas 4 kali cubaan gagal, app auto-lulus
+let tryCount = {};
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 function setStatus(t){ $("status").textContent = t; }
@@ -1597,7 +1598,7 @@ function loadAyah(i,resetRep=true){
   ayahSeq++; cancelTranslation();
   bestCursor = 0; bestMarks = [];
   aIdx = Math.max(0, Math.min(+i || 0, current.ayat.length-1));
-  cursor=0; if(resetRep) repDone=0; drillWord=-1; drillAt=0; badTries=0; fixedOnce={};
+  cursor=0; if(resetRep) repDone=0; drillWord=-1; drillAt=0; badTries=0; fixedOnce={}; tryCount={};
   marks = new Array(ayahTokens(currentAyah()).length).fill(null);
   resetHeard(); applyBsmBarrier();
   $("ayah").value = aIdx;
@@ -1608,7 +1609,7 @@ function loadAyah(i,resetRep=true){
   saveResume();
   if(S.autoPlay) setTimeout(()=>playAyah(aIdx), 250);
 }
-function resetAyah(){ cursor=0; bestCursor=0; bestMarks=[]; marks=marks.map(()=>null); drillWord=-1; drillAt=0; badTries=0; fixedOnce={}; resetHeard(); applyBsmBarrier(); render(); }
+function resetAyah(){ cursor=0; bestCursor=0; bestMarks=[]; marks=marks.map(()=>null); drillWord=-1; drillAt=0; badTries=0; fixedOnce={}; tryCount={}; resetHeard(); applyBsmBarrier(); render(); }
 
 function nextAyah(){
   if(aIdx+1 < current.ayat.length) loadAyah(aIdx+1);
@@ -1859,143 +1860,101 @@ function processSpoken(text, isFinal){
   const sw = words(text);
   const floor = applyBsmBarrier();     // Bismillah: halangan, tidak disemak
 
+  /* ===== DASAR BAHARU =====
+     1) Perkataan yang SUDAH HIJAU tidak akan diganggu lagi. Kursor tidak
+        diundurkan ke belakang dan markah hijau tidak boleh bertukar merah.
+     2) Keutamaan diberi kepada perkataan yang BELUM dibaca (di hadapan kursor).
+     3) App TIDAK menegur di tengah bacaan. Ia mendengar sehingga hujung ayat,
+        barulah memberitahu perkataan mana yang perlu diulang.
+     4) Jika satu perkataan gagal lebih daripada MAX_TRIES kali, app auto-lulus
+        kerana kemungkinan besar ia masalah pengecaman suara, bukan bacaan. */
+
+  const firstBad = ()=>{ for(let i=floor;i<target.length;i++) if(marks[i]==="bad") return i; return -1; };
+  const passWord = (i)=>{ marks[i]="ok"; tryCount[i]=0; };
+
   for(let si=0; si<sw.length; si++){
     const spoken = sw[si];
     const judge = isFinal || si < sw.length-1;   // perkataan terakhir interim belum stabil
-    if(cursor >= target.length) break;
-
-    /* --- ULANG BACA: perkataan yang SUDAH hijau --- */
-    // Pengguna boleh mula semula dari mana-mana; perkataan hijau hanya berkelip,
-    // kursor TIDAK diundurkan dan tiada markah salah diberi.
-    /* Cari padanan pada perkataan yang SUDAH dilalui (dari yang terdekat ke belakang).
-       Ini membolehkan pembaca mengulang bacaan dari mana-mana kedudukan — termasuk
-       dari awal ayat — dan app akan menyelaraskan kursor secara bijak. */
-    /* --- MENYELARAS SEMULA KEDUDUKAN BACAAN (berasaskan FRASA) ---
-       Pembaca dibenarkan mula semula beberapa perkataan sebelum perkataan yang
-       salah. App akan mendengar dahulu, mengenal pasti frasa itu daripada ayat
-       mana / kedudukan mana, baru menyambung semakan. */
     pushHeard(spoken);
-    let already = -1;
-    const al = alignBack(spoken, target, floor, cursor);
-    if(al){
-      if(al.sure) already = al.i;
-      else {
-        // Frasa masih kabur (perkataan berulang) — DENGAR dahulu, jangan hukum.
+
+    /* ---------- FASA SEMAKAN SEMULA (selepas habis ayat, ada yang merah) ---------- */
+    if(cursor >= target.length){
+      const b = firstBad();
+      if(b < 0) break;
+      if(similar(spoken, target[b]) >= TOL()){
+        passWord(b);
         cancelWordCorrection();
-        setStatus("App sedang mendengar — teruskan bacaan beberapa perkataan lagi.");
-        continue;
-      }
-    }
-    if(already >= 0){
-      cancelWordCorrection();
-      drillWord = -1; badTries = 0;
-      let hadBad = false;
-      for(let k=already;k<marks.length;k++){
-        if(marks[k]==="bad"){ marks[k]=null; fixedOnce[k]=false; hadBad = true; }
-      }
-      if(hadBad) setStatus(already <= floor
-        ? "Bacaan diulang dari awal ayat — app sedang mendengar, teruskan."
-        : "Bacaan diulang — app sedang mendengar, teruskan.");
-    }
-
-
-
-    // MOD LATIH TUBI: perkataan sedang dibetulkan — wajib baca semula perkataan itu sahaja
-    if(!S.freeFlow && S.drill && marks[cursor]==="bad"){
-      if(similar(spoken, target[cursor]) >= TOL()){
-        marks[cursor]="ok"; cursor++; drillWord=-1; badTries=0;
         if(S.strict) beep("ok");
-        setStatus("Bagus! Perkataan itu sudah betul. Teruskan bacaan.");
-        continue;
-      }
-      if(already >= 0){ flashWord = already; if(marks[already] !== "bad") marks[already] = "ok"; cursor = already + 1; badTries = 0; continue; }   // menyelaraskan semula bacaan yang diulang
-      if(!judge) continue;
-      const bad = cursor;
-      badTries++;
-      if(badTries > MAX_TRIES){
-        marks[cursor]="ok"; cursor++; drillWord=-1; badTries=0;
-        cancelWordCorrection();
-        setStatus("Diluluskan — mungkin ralat pengecaman suara, bukan bacaan anda. Teruskan bacaan.");
+        const nb = firstBad();
+        setStatus(nb < 0 ? "Semua perkataan sudah betul." : "Bagus! Teruskan pada perkataan merah seterusnya.");
         render();
+        if(nb < 0){ ayahComplete(); return; }
         continue;
       }
-      render();
-      const now = Date.now();
-      if(S.autoFix && now - drillAt > 900){
-        drillAt = now; drillWord = bad;
-        setStatus(badTries>=2
-          ? "Belum tepat lagi. Anda boleh tekan butang Langkau, atau ulang perkataan merah itu."
-          : "Belum tepat lagi. Dengar bacaan yang betul, kemudian ulang perkataan merah itu.");
-        scheduleWordCorrection(bad, 0);
-        return;
+      // perkataan hijau yang diulang baca — abaikan sahaja, jangan hukum
+      let echo = -1;
+      for(let j=floor;j<target.length;j++) if(marks[j]==="ok" && similar(spoken, target[j]) >= TOL_BACK()){ echo = j; break; }
+      if(echo >= 0){ flashWord = echo; continue; }
+      if(!judge) continue;
+      tryCount[b] = (tryCount[b]||0) + 1;
+      if(tryCount[b] > MAX_TRIES){
+        passWord(b);
+        cancelWordCorrection();
+        setStatus("Diluluskan automatik — kemungkinan ralat pengecaman suara, bukan bacaan anda.");
+        const nb = firstBad();
+        render();
+        if(nb < 0){ ayahComplete(); return; }
+        continue;
       }
-      setStatus(badTries>=2
-        ? "Masih belum tepat. Ulang lagi atau tekan butang Langkau."
-        : "Belum tepat lagi. Sila ulang perkataan merah itu sehingga betul.");
-      continue;                            // jangan maju selagi belum betul
-    }
-
-    if(similar(spoken, target[cursor]) >= TOL()){
-      marks[cursor]="ok"; cursor++; badTries=0; continue;
-    }
-    /* Melangkau perkataan yang salah TIDAK dibenarkan: kami tidak lagi
-       "melompat" ke perkataan berikutnya walaupun ia dipadankan. */
-    // gabungan dua perkataan target (cth. dibaca bersambung)
-    if(cursor+1 < target.length && similar(spoken, target[cursor]+target[cursor+1]) >= TOL()){
-      marks[cursor]="ok"; marks[cursor+1]="ok"; cursor+=2; badTries=0; continue;
-    }
-    /* Padanan WASAL mengikut hukum tajwid (mis. مِن رَّبِّهِم، مِن بَعْد) —
-       bila dibaca bersambung, majukan kursor 2 perkataan. */
-    if(cursor+1 < target.length && wasalMatch(spoken, target[cursor], target[cursor+1])){
-      marks[cursor]="ok"; marks[cursor+1]="ok"; cursor+=2; badTries=0; continue;
-    }
-    // Perkataan hijau diulang baca — biar berkelip hijau sahaja, kursor kekal di tempatnya
-    if(already >= 0){ flashWord = already; if(marks[already] !== "bad") marks[already] = "ok"; cursor = already + 1; badTries = 0; continue; }
-    if(!judge) continue;                 // jangan hukum perkataan yang masih dituturkan
-
-    /* --- MOD BEBAS: salah kekal merah, dibetulkan sekali sahaja, bacaan diteruskan --- */
-    if(S.freeFlow){
-      const bad = cursor;
-      marks[bad]="bad";
-      cursor++;
-      const first = !fixedOnce[bad];
-      if(first){
-        fixedOnce[bad]=true;
-        if(S.strict) beep("err");
-        setStatus("Perkataan itu belum tepat — dengar bacaan yang betul, kemudian teruskan bacaan.");
-        if(S.autoFix){ drillWord=bad; drillAt=Date.now(); render(); scheduleWordCorrection(bad, 0); }
-      } else {
-        setStatus("Teruskan bacaan.");
-      }
+      setStatus(`Ulang perkataan merah itu (cubaan ${tryCount[b]} daripada ${MAX_TRIES}).`);
+      if(S.autoFix && tryCount[b] >= 2){ drillWord = b; drillAt = Date.now(); render(); scheduleWordCorrection(b, 0); }
       continue;
     }
 
-    if(marks[cursor] === "bad"){
-      badTries++;
-      if(badTries > MAX_TRIES){
-        marks[cursor]="ok"; cursor++; drillWord=-1; badTries=0;
-        cancelWordCorrection();
-        setStatus("Diluluskan — mungkin ralat pengecaman suara, bukan bacaan anda. Teruskan bacaan.");
-        continue;
-      }
+    /* ---------- KEUTAMAAN 1: perkataan yang BELUM dibaca ---------- */
+    if(similar(spoken, target[cursor]) >= TOL()){
+      marks[cursor]="ok"; tryCount[cursor]=0; cursor++; badTries=0; continue;
     }
-    if(marks[cursor] !== "bad"){
-      marks[cursor]="bad";
-      badTries = 1;
-      if(S.strict){ beep("err"); }
-      setStatus((S.drill || S.mustCorrect)
-        ? "Bacaan belum tepat. Sila ulang perkataan merah ini sehingga betul sebelum diteruskan."
-        : "Bacaan tidak tepat. Tekan pada perkataan merah untuk mendengar bacaan yang betul.");
-      if(S.autoFix){ const bad=cursor; drillWord=bad; drillAt=Date.now(); render(); scheduleWordCorrection(bad, 0); return; }
+    if(cursor+1 < target.length && similar(spoken, target[cursor]+target[cursor+1]) >= TOL()){
+      marks[cursor]="ok"; marks[cursor+1]="ok"; cursor+=2; badTries=0; continue;
     }
-    if(!S.mustCorrect && !S.drill){ cursor++; }   // benarkan teruskan bila tetapan dimatikan
+    if(cursor+1 < target.length && wasalMatch(spoken, target[cursor], target[cursor+1])){
+      marks[cursor]="ok"; marks[cursor+1]="ok"; cursor+=2; badTries=0; continue;
+    }
+
+    /* ---------- KEUTAMAAN 2: ulang baca perkataan yang sudah hijau ----------
+       Hanya berkelip; kursor kekal di tempatnya supaya bacaan yang sudah lulus
+       tidak disemak semula dan tidak boleh bertukar merah. */
+    let already = -1;
+    for(let j=cursor-1;j>=floor;j--) if(marks[j]==="ok" && similar(spoken, target[j]) >= TOL_BACK()){ already = j; break; }
+    if(already >= 0){ flashWord = already; continue; }
+
+    if(!judge) continue;   // jangan hukum perkataan yang masih dituturkan
+
+    /* ---------- Belum tepat: tandakan merah, TERUSKAN mendengar ---------- */
+    const bad = cursor;
+    tryCount[bad] = (tryCount[bad]||0) + 1;
+    if(tryCount[bad] > MAX_TRIES){
+      passWord(bad);
+    } else {
+      marks[bad] = "bad";
+    }
+    cursor++;
+    setStatus("Teruskan bacaan — app akan tunjuk perkataan yang perlu diulang selepas ayat tamat.");
+    continue;
   }
 
   render();
   const isDone = m => m==="ok" || m==="skip";
-  const finished = cursor >= target.length && marks.length &&
-    (S.freeFlow ? marks.every(m=>m) : marks.every(isDone));
-  if(finished) ayahComplete();
+  if(cursor >= target.length && marks.length){
+    if(marks.every(isDone)){ ayahComplete(); return; }
+    const b = firstBad();
+    if(b >= 0){
+      const n = marks.filter(m=>m==="bad").length;
+      setStatus(`Ayat tamat. Ada ${n} perkataan merah — sila ulang baca perkataan merah itu sehingga hijau.`);
+      if(S.autoFix){ drillWord = b; drillAt = Date.now(); render(); scheduleWordCorrection(b, 0); }
+    }
+  }
 }
 
 /* ============ 8b. ENJIN AUDIO CANGGIH (percuma, dalam pelayar) ============
