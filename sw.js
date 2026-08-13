@@ -7,7 +7,7 @@
    - Data Al-Quran  : Stale-While-Revalidate (disimpan untuk kegunaan luar talian)
    - Audio bacaan   : Cache First (diuruskan juga oleh app: 1 ayat ke hadapan)
 */
-const VERSION = "v21";
+const VERSION = "v22";
 const SHELL = "tasmi-shell-" + VERSION;
 const FONTS = "tasmi-fonts-" + VERSION;
 const DATA = "tasmi-data-" + VERSION;
@@ -16,6 +16,7 @@ const AUDIO = "tasmi-audio-v1"; // sama dengan nama cache dalam app
 const ASSETS = [
   "./",
   "./index.html",
+  "./wasalEngine.js",
   "./manifest.json",
   "./icon-192.png",
   "./icon-512.png",
