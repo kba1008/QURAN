@@ -1397,6 +1397,17 @@ function keepProgress(){
 let watchdog=null;
 let drillWord=-1, drillAt=0;
 let badTries=0, fixedOnce={};
+/* Kiraan teguran BAGI SETIAP PERKATAAN (bukan kaunter global).
+   Kekal walaupun pembaca mengulang dari awal ayat / beberapa perkataan sebelum
+   perkataan salah (adab bacaan bersama guru). Jadi teguran ke-3 tetap dikira. */
+let wordTries = {};
+function triesOf(i){ return wordTries[i] | 0; }
+function addTry(i){ return (wordTries[i] = triesOf(i) + 1); }
+function autoPass(i, msg){
+  marks[i] = "ok"; fixedOnce[i] = true; wordTries[i] = 0;
+  drillWord = -1; badTries = 0; cancelWordCorrection();
+  setStatus(msg || "Sudah ditegur 2 kali — perkataan itu diluluskan (hijau). Teruskan bacaan.");
+}
 /* Selepas pengguna mengulang perkataan yang sama LEBIH 3 kali, kemungkinan besar
    ralat berpunca daripada mikrofon / pengecaman pelayar, bukan bacaan pengguna.
    Maka bacaan itu DILULUSKAN supaya pembaca tidak tersangkut. */
@@ -1459,7 +1470,7 @@ let flashWord=-1;
 function updateSkipBtn(){
   const btn = $("skip"); if(!btn) return;
   const hasBad = marks.some(m=>m==="bad");
-  const allow = S.freeFlow ? true : (hasBad && badTries >= 2);
+  const allow = S.freeFlow ? true : (hasBad && Math.max(badTries, triesOf(cursor)) >= 2);
   btn.disabled = !allow;
   btn.title = allow ? "Langkau perkataan ini" : "Ulang baca sekurang-kurangnya 2 kali sebelum boleh langkau";
 }
@@ -1608,7 +1619,7 @@ function loadAyah(i,resetRep=true){
   ayahSeq++; cancelTranslation();
   bestCursor = 0; bestMarks = [];
   aIdx = Math.max(0, Math.min(+i || 0, current.ayat.length-1));
-  cursor=0; if(resetRep) repDone=0; drillWord=-1; drillAt=0; badTries=0; fixedOnce={};
+  cursor=0; if(resetRep) repDone=0; drillWord=-1; drillAt=0; badTries=0; fixedOnce={}; wordTries={};
   marks = new Array(ayahTokens(currentAyah()).length).fill(null);
   resetHeard(); applyBsmBarrier();
   $("ayah").value = aIdx;
@@ -1619,7 +1630,7 @@ function loadAyah(i,resetRep=true){
   saveResume();
   if(S.autoPlay) setTimeout(()=>playAyah(aIdx), 250);
 }
-function resetAyah(){ cursor=0; bestCursor=0; bestMarks=[]; marks=marks.map(()=>null); drillWord=-1; drillAt=0; badTries=0; fixedOnce={}; resetHeard(); applyBsmBarrier(); render(); }
+function resetAyah(){ cursor=0; bestCursor=0; bestMarks=[]; marks=marks.map(()=>null); drillWord=-1; drillAt=0; badTries=0; fixedOnce={}; wordTries={}; resetHeard(); applyBsmBarrier(); render(); }
 
 function nextAyah(){
   if(aIdx+1 < current.ayat.length){ loadAyah(aIdx+1); return; }
@@ -2010,7 +2021,7 @@ function processSpoken(text, isFinal){
       drillWord = -1; badTries = 0;
       let hadBad = false;
       for(let k=already;k<marks.length;k++){
-        if(marks[k]==="bad"){ marks[k]=null; fixedOnce[k]=false; hadBad = true; }
+        if(marks[k]==="bad"){ marks[k]=null; fixedOnce[k]=false; hadBad = true; } // kiraan teguran (wordTries) SENGAJA dikekalkan
       }
       if(hadBad) setStatus(already <= floor
         ? "Bacaan diulang dari awal ayat — app sedang mendengar, teruskan."
@@ -2041,11 +2052,9 @@ function processSpoken(text, isFinal){
       if(already >= 0){ flashWord = already; if(marks[already] !== "bad") marks[already] = "ok"; cursor = already + 1; badTries = 0; continue; }   // menyelaraskan semula bacaan yang diulang
       if(!judge) continue;
       const bad = cursor;
-      badTries++;
+      badTries = addTry(bad);
       if(badTries > MAX_TRIES){
-        marks[cursor]="ok"; fixedOnce[cursor]=true; cursor++; drillWord=-1; badTries=0;
-        cancelWordCorrection();
-        setStatus("Sudah dibetulkan 2 kali — perkataan itu diluluskan (hijau). Teruskan bacaan.");
+        autoPass(bad); cursor = bad + 1;
         render();
         continue;
       }
@@ -2101,20 +2110,15 @@ function processSpoken(text, isFinal){
       continue;
     }
 
-    if(marks[cursor] === "bad"){
-      badTries++;
-      if(badTries > MAX_TRIES){
-        marks[cursor]="ok"; fixedOnce[cursor]=true; cursor++; drillWord=-1; badTries=0;
-        cancelWordCorrection();
-        setStatus("Sudah dibetulkan 2 kali — perkataan itu diluluskan (hijau). Teruskan bacaan.");
-        render();
-        continue;
-      }
-    }
     if(isLocked(cursor)){ cursor++; badTries=0; continue; }  // hijau: tiada semakan lagi
+    badTries = addTry(cursor);
+    if(badTries > MAX_TRIES){
+      const bad = cursor; autoPass(bad); cursor = bad + 1;
+      render();
+      continue;
+    }
     if(marks[cursor] !== "bad"){
       marks[cursor]="bad";
-      badTries = 1;
       if(S.strict){ beep("err"); }
       setStatus((S.drill || S.mustCorrect)
         ? "Bacaan belum tepat. Sila ulang perkataan merah ini sehingga betul sebelum diteruskan."
@@ -2396,12 +2400,12 @@ $("mic").onclick = ()=>{
 $("skip").onclick = ()=>{
   const t = ayahTokens(currentAyah());
   const hasBad = marks.some(m=>m==="bad");
-  if(!S.freeFlow && (!hasBad || badTries < 2)){
+  if(!S.freeFlow && (!hasBad || Math.max(badTries, triesOf(cursor)) < 2)){
     setStatus("Sila ulang baca perkataan merah sekurang-kurangnya 2 kali sebelum melangkau.");
     beep("err"); updateSkipBtn(); return;
   }
   if(cursor < t.length){
-    marks[cursor]="skip"; fixedOnce[cursor]=true; cursor++; badTries=0; drillWord=-1;
+    marks[cursor]="skip"; fixedOnce[cursor]=true; wordTries[cursor]=0; cursor++; badTries=0; drillWord=-1;
     render(); setStatus("Perkataan dilangkau. Teruskan bacaan.");
     if(cursor >= t.length && marks.every(m=>m)) ayahComplete();
   }
