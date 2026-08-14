@@ -13,17 +13,17 @@
 <link href="https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Manrope:wght@400;600;800&display=swap" rel="stylesheet" />
 <style>
   /* ==== MOD PAPARAN SATU MUKA PENUH ==== */
-  .ayah.fullpage{ text-align:justify; line-height:2.1; max-height:none; }
+  .ayah.fullpage{ text-align:right; line-height:2.1; max-height:none; }
   .ayah.fullpage .ay{ }
   .ayah.fullpage .ay.cur-ay{ background:var(--soft); border-radius:12px; box-shadow:0 0 0 2px var(--glow1); }
   .ayah.fullpage .ayno{
     display:inline-block; font-family:Manrope,system-ui,sans-serif; font-size:.42em;
     color:var(--gold); border:1px solid var(--line); border-radius:999px;
-    padding:0 .5em; margin:0 .3em; vertical-align:middle;
+    padding:0 .45em; margin:0 .15em; vertical-align:middle;
   }
   .ayah.fullpage .wo{ cursor:pointer; }
   /* Tulisan bersambung seperti mushaf: tiada jarak tambahan antara perkataan */
-  .ayah.fullpage{ word-spacing:normal; }
+  .ayah.fullpage{ word-spacing:-0.06em; }
   .ayah.fullpage .wo{ padding:0; margin:0; display:inline; }
   .ayah.fullpage .ay{ display:inline; }
 
@@ -132,7 +132,7 @@
   .meta{display:flex;justify-content:space-between;align-items:center;margin:18px 2px 10px;font-size:12px;color:var(--muted)}
   .ayah{
     direction:rtl;text-align:right;font-family:'Amiri Quran',serif;font-size:var(--ayah-size);line-height:2.35;
-    padding:8px 4px;word-spacing:normal;
+    padding:8px 4px;word-spacing:-0.04em;
   }
   .ayah.hidden-text .w{color:transparent;text-shadow:0 0 14px rgba(234,243,239,.45)}
   .ayah.hidden-text .w.ok,.ayah.hidden-text .w.skip,.ayah.hidden-text .w.bad{color:inherit;text-shadow:none}
@@ -149,7 +149,7 @@
   .w.cur{background:rgba(216,182,120,.16);box-shadow:inset 0 0 0 1px rgba(216,182,120,.45)}
   .w{cursor:pointer}
   /* ===== Mod tulisan bersambung (seperti mushaf biasa) ===== */
-  .ayah.joined{word-spacing:normal;letter-spacing:0}
+  .ayah.joined{word-spacing:-0.06em;letter-spacing:0;text-align:right}
   .ayah.joined .w{display:inline;padding:0;margin:0;border-radius:6px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
   .ayah.joined .wu{display:inline}
   .ayah.joined .w.ok{box-shadow:none;background:rgba(47,191,113,.16)}
@@ -1395,7 +1395,7 @@ let badTries=0, fixedOnce={};
 /* Selepas pengguna mengulang perkataan yang sama LEBIH 3 kali, kemungkinan besar
    ralat berpunca daripada mikrofon / pengecaman pelayar, bukan bacaan pengguna.
    Maka bacaan itu DILULUSKAN supaya pembaca tidak tersangkut. */
-const MAX_TRIES = 3;
+const MAX_TRIES = 2;   // app membetulkan 2 kali; salah kali ke-3 → auto langkau
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 var _statusToastTimer = null;
@@ -2035,9 +2035,9 @@ function processSpoken(text, isFinal){
       const bad = cursor;
       badTries++;
       if(badTries > MAX_TRIES){
-        marks[cursor]="ok"; cursor++; drillWord=-1; badTries=0;
+        marks[cursor]="skip"; fixedOnce[cursor]=true; cursor++; drillWord=-1; badTries=0;
         cancelWordCorrection();
-        setStatus("Diluluskan — mungkin ralat pengecaman suara, bukan bacaan anda. Teruskan bacaan.");
+        setStatus("Sudah dibetulkan 2 kali — perkataan itu dilangkau. Teruskan bacaan.");
         render();
         continue;
       }
@@ -2046,7 +2046,7 @@ function processSpoken(text, isFinal){
       if(S.autoFix && now - drillAt > 900){
         drillAt = now; drillWord = bad;
         setStatus(badTries>=2
-          ? "Belum tepat lagi. Anda boleh tekan butang Langkau, atau ulang perkataan merah itu."
+          ? "Ini pembetulan kali kedua. Jika masih belum tepat, perkataan ini akan dilangkau."
           : "Belum tepat lagi. Dengar bacaan yang betul, kemudian ulang perkataan merah itu.");
         scheduleWordCorrection(bad, 0);
         return;
@@ -2096,9 +2096,10 @@ function processSpoken(text, isFinal){
     if(marks[cursor] === "bad"){
       badTries++;
       if(badTries > MAX_TRIES){
-        marks[cursor]="ok"; cursor++; drillWord=-1; badTries=0;
+        marks[cursor]="skip"; fixedOnce[cursor]=true; cursor++; drillWord=-1; badTries=0;
         cancelWordCorrection();
-        setStatus("Diluluskan — mungkin ralat pengecaman suara, bukan bacaan anda. Teruskan bacaan.");
+        setStatus("Sudah dibetulkan 2 kali — perkataan itu dilangkau. Teruskan bacaan.");
+        render();
         continue;
       }
     }
