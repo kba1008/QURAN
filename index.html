@@ -6,8 +6,9 @@
 <title>Tasmi' — Semakan Bacaan Al-Quran</title>
 <meta name="description" content="Aplikasi PWA premium untuk menyemak bacaan Al-Quran secara langsung dengan pengecaman suara percuma, mod hafazan dan terjemahan Bahasa Melayu." />
 <meta name="theme-color" content="#0b1210" />
-<link rel="manifest" href="./manifest.json" />
-<link rel="apple-touch-icon" href="./icon-192.png" />
+<link rel="manifest" href="./manifest.json?v=30" />
+<link rel="icon" type="image/png" href="./icon-192.png?v=30" />
+<link rel="apple-touch-icon" href="./icon-192.png?v=30" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Manrope:wght@400;600;800&display=swap" rel="stylesheet" />
@@ -23,20 +24,23 @@
   }
   .ayah.fullpage .wo{ cursor:pointer; }
   /* Tulisan bersambung seperti mushaf: tiada jarak tambahan antara perkataan */
-  .ayah.fullpage{ word-spacing:-0.06em; }
+  .ayah.fullpage{ word-spacing:-0.06em; text-align:justify; text-justify:inter-word; text-align-last:right; }
   .ayah.fullpage .wo{ padding:0; margin:0; display:inline; }
   .ayah.fullpage .ay{ display:inline; }
 
   /* ==== BISMILLAH DIASINGKAN DARIPADA AYAT ==== */
   .ayah .bsm-line{
-    display:block; text-align:center; font-size:.82em; line-height:2;
-    padding-bottom:.35em; margin-bottom:.45em; border-bottom:1px solid var(--line);
+    display:block; text-align:center; text-align-last:center; font-size:.86em; line-height:2;
+    padding-bottom:.25em;
   }
-  .ayah .ayah-line{ display:block; }
-  /* Halangan nyata selepas Bismillah: garis pemisah + ruang */
+  /* Satu garisan pemisah sahaja antara Bismillah dan ayat */
   .ayah .bsm-gap{
-    display:block; height:0; margin:.15em 0 .55em;
-    border-top:1px dashed var(--line);
+    display:block; height:0; margin:.15em auto .6em; width:92%;
+    border-top:1px solid var(--line);
+  }
+  /* Ayat Quran disusun JUSTIFY supaya memenuhi ruang paparan dengan kemas */
+  .ayah .ayah-line{
+    display:block; text-align:justify; text-justify:inter-word; text-align-last:right;
   }
   .ayah .bsm-line .w{ opacity:.9; }
   .ayah .ayah-line .ayno{
@@ -131,16 +135,17 @@
     border-radius:14px;padding:12px 14px;font-family:inherit;font-size:14px;outline:none}
   .meta{display:flex;justify-content:space-between;align-items:center;margin:18px 2px 10px;font-size:12px;color:var(--muted)}
   .ayah{
-    direction:rtl;text-align:right;font-family:'Amiri Quran',serif;font-size:var(--ayah-size);line-height:2.35;
-    padding:8px 4px;word-spacing:-0.04em;
+    direction:rtl;text-align:justify;text-justify:inter-word;text-align-last:right;
+    font-family:'Amiri Quran',serif;font-size:var(--ayah-size);line-height:2.35;
+    padding:8px 4px;word-spacing:-0.04em;hyphens:none;
   }
   .ayah.hidden-text .w{color:transparent;text-shadow:0 0 14px rgba(234,243,239,.45)}
   .ayah.hidden-text .w.ok,.ayah.hidden-text .w.skip,.ayah.hidden-text .w.bad{color:inherit;text-shadow:none}
   .w{padding:2px 8px;border-radius:10px;transition:background .18s ease,color .18s ease;display:inline-block}
   .w.ok{background:rgba(47,191,113,.18);box-shadow:inset 0 0 0 1px rgba(47,191,113,.35)}
   .w.skip{background:rgba(47,191,113,.18);box-shadow:inset 0 0 0 1px rgba(47,191,113,.35)}
-  /* Bismillah: halangan sahaja — bukan bacaan yang disemak, jadi tidak hijau */
-  .w.bsm{background:transparent;box-shadow:none;opacity:.72}
+  /* Bismillah wajib dibaca: ditandakan hijau seperti perkataan ayat */
+  .w.bsm{background:rgba(47,191,113,.18);box-shadow:inset 0 0 0 1px rgba(47,191,113,.35)}
   .w.bad{background:rgba(239,75,93,.30);color:#000;box-shadow:inset 0 0 0 1px rgba(239,75,93,.55);animation:shake .3s}
   .w.bad [class^="tj-"]{color:inherit}
   .w.bad .tj-m6{color:#8f1206}.w.bad .tj-m4{color:#8a5c00}.w.bad .tj-m2{color:#1c3aa8}
@@ -1678,7 +1683,7 @@ async function loadSurah(n, targetAyah = 0){
   fillAyahSelect();
   loadAyah(Math.max(0, Math.min(+targetAyah || 0, current.ayat.length - 1)));
   setStatus((n!==1 && n!==9)
-    ? "Bismillah diasingkan daripada ayat 1 dan tidak disemak. Mula baca ayat 1."
+    ? "Mula dengan Bismillah, kemudian sambung ayat 1."
     : "Tekan mikrofon dan mula membaca.");
   busy = false;
 }
@@ -1818,7 +1823,6 @@ function bsmSettled(){
 function applyBsmBarrier(){
   const n = bsmCount();
   if(!n) return 0;
-  for(let i=0;i<n;i++) if(marks[i] === "bad") marks[i] = null;  // jangan pernah merah
   if(bsmSettled()){
     if(cursor < n) cursor = n;
     return n;                       // halangan aktif
@@ -1933,7 +1937,7 @@ function processSpoken(text, isFinal){
         if(sc == null) continue;
         if(isLocked(w)) continue;                     // sudah hijau — jangan sentuh
         if(sc >= thr){ marks[w] = "ok"; }
-        else if(isFinal && w >= bsmN){ marks[w] = "bad"; if(firstBad < 0) firstBad = w; }
+        else if(isFinal){ marks[w] = "bad"; if(firstBad < 0) firstBad = w; }
       }
       /* Pembaca terus mula ayat: maafkan Bismillah supaya bacaan tidak tersangkut */
       if(bsmN && !bsmSettled()){
