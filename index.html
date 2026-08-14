@@ -1395,7 +1395,7 @@ let badTries=0, fixedOnce={};
 /* Selepas pengguna mengulang perkataan yang sama LEBIH 3 kali, kemungkinan besar
    ralat berpunca daripada mikrofon / pengecaman pelayar, bukan bacaan pengguna.
    Maka bacaan itu DILULUSKAN supaya pembaca tidak tersangkut. */
-const MAX_TRIES = 2;   // app membetulkan 2 kali; salah kali ke-3 → auto langkau
+const MAX_TRIES = 2;   // app membetulkan 2 kali sahaja; salah kali ke-3 → auto lulus (hijau)
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 var _statusToastTimer = null;
@@ -2039,9 +2039,9 @@ function processSpoken(text, isFinal){
       const bad = cursor;
       badTries++;
       if(badTries > MAX_TRIES){
-        marks[cursor]="skip"; fixedOnce[cursor]=true; cursor++; drillWord=-1; badTries=0;
+        marks[cursor]="ok"; fixedOnce[cursor]=true; cursor++; drillWord=-1; badTries=0;
         cancelWordCorrection();
-        setStatus("Sudah dibetulkan 2 kali — perkataan itu dilangkau. Teruskan bacaan.");
+        setStatus("Sudah dibetulkan 2 kali — perkataan itu diluluskan (hijau). Teruskan bacaan.");
         render();
         continue;
       }
@@ -2050,13 +2050,13 @@ function processSpoken(text, isFinal){
       if(S.autoFix && now - drillAt > 900){
         drillAt = now; drillWord = bad;
         setStatus(badTries>=2
-          ? "Ini pembetulan kali kedua. Jika masih belum tepat, perkataan ini akan dilangkau."
+          ? "Ini pembetulan kali kedua. Jika masih belum tepat, perkataan ini akan diluluskan (hijau)."
           : "Belum tepat lagi. Dengar bacaan yang betul, kemudian ulang perkataan merah itu.");
         scheduleWordCorrection(bad, 0);
         return;
       }
       setStatus(badTries>=2
-        ? "Masih belum tepat. Ulang lagi atau tekan butang Langkau."
+        ? "Masih belum tepat. Cubaan seterusnya akan diluluskan secara automatik."
         : "Belum tepat lagi. Sila ulang perkataan merah itu sehingga betul.");
       continue;                            // jangan maju selagi belum betul
     }
@@ -2100,9 +2100,9 @@ function processSpoken(text, isFinal){
     if(marks[cursor] === "bad"){
       badTries++;
       if(badTries > MAX_TRIES){
-        marks[cursor]="skip"; fixedOnce[cursor]=true; cursor++; drillWord=-1; badTries=0;
+        marks[cursor]="ok"; fixedOnce[cursor]=true; cursor++; drillWord=-1; badTries=0;
         cancelWordCorrection();
-        setStatus("Sudah dibetulkan 2 kali — perkataan itu dilangkau. Teruskan bacaan.");
+        setStatus("Sudah dibetulkan 2 kali — perkataan itu diluluskan (hijau). Teruskan bacaan.");
         render();
         continue;
       }
