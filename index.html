@@ -1617,8 +1617,12 @@ function loadAyah(i,resetRep=true){
 function resetAyah(){ cursor=0; bestCursor=0; bestMarks=[]; marks=marks.map(()=>null); drillWord=-1; drillAt=0; badTries=0; fixedOnce={}; resetHeard(); applyBsmBarrier(); render(); }
 
 function nextAyah(){
-  if(aIdx+1 < current.ayat.length) loadAyah(aIdx+1);
-  else setStatus("Tahniah! Surah ini telah selesai dibaca.");
+  if(aIdx+1 < current.ayat.length){ loadAyah(aIdx+1); return; }
+  // Surah tamat — buka surah seterusnya mengikut turutan (114 -> 1)
+  const done = current.n;
+  const nxt  = done >= 114 ? 1 : done + 1;
+  setStatus(`Tahniah! ${surahName(done)} telah selesai dibaca. Membuka ${surahName(nxt)}…`);
+  setTimeout(()=>{ loadSurah(nxt, 0); }, 1200);
 }
 
 /* ============ 6. MUAT SURAH (API + cache) ============ */
