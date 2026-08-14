@@ -22,6 +22,10 @@
     padding:0 .5em; margin:0 .3em; vertical-align:middle;
   }
   .ayah.fullpage .wo{ cursor:pointer; }
+  /* Tulisan bersambung seperti mushaf: tiada jarak tambahan antara perkataan */
+  .ayah.fullpage{ word-spacing:normal; }
+  .ayah.fullpage .wo{ padding:0; margin:0; display:inline; }
+  .ayah.fullpage .ay{ display:inline; }
 
   /* ==== BISMILLAH DIASINGKAN DARIPADA AYAT ==== */
   .ayah .bsm-line{
@@ -128,7 +132,7 @@
   .meta{display:flex;justify-content:space-between;align-items:center;margin:18px 2px 10px;font-size:12px;color:var(--muted)}
   .ayah{
     direction:rtl;text-align:right;font-family:'Amiri Quran',serif;font-size:var(--ayah-size);line-height:2.35;
-    padding:8px 4px;word-spacing:.12em;
+    padding:8px 4px;word-spacing:normal;
   }
   .ayah.hidden-text .w{color:transparent;text-shadow:0 0 14px rgba(234,243,239,.45)}
   .ayah.hidden-text .w.ok,.ayah.hidden-text .w.skip,.ayah.hidden-text .w.bad{color:inherit;text-shadow:none}
@@ -137,12 +141,17 @@
   .w.skip{background:rgba(47,191,113,.18);box-shadow:inset 0 0 0 1px rgba(47,191,113,.35)}
   /* Bismillah: halangan sahaja — bukan bacaan yang disemak, jadi tidak hijau */
   .w.bsm{background:transparent;box-shadow:none;opacity:.72}
-  .w.bad{background:rgba(239,75,93,.18);color:#ff9aa5;box-shadow:inset 0 0 0 1px rgba(239,75,93,.4);animation:shake .3s}
+  .w.bad{background:rgba(239,75,93,.30);color:#000;box-shadow:inset 0 0 0 1px rgba(239,75,93,.55);animation:shake .3s}
+  .w.bad [class^="tj-"]{color:inherit}
+  .w.bad .tj-m6{color:#8f1206}.w.bad .tj-m4{color:#8a5c00}.w.bad .tj-m2{color:#1c3aa8}
+  .w.bad .tj-ghn{color:#9c4300}.w.bad .tj-ikh{color:#5b0069}.w.bad .tj-idg{color:#0a5c47}
+  .w.bad .tj-idgw{color:#3f3f3f}.w.bad .tj-iql{color:#0a6d92}.w.bad .tj-qal{color:#8c0005}
   .w.cur{background:rgba(216,182,120,.16);box-shadow:inset 0 0 0 1px rgba(216,182,120,.45)}
   .w{cursor:pointer}
   /* ===== Mod tulisan bersambung (seperti mushaf biasa) ===== */
-  .ayah.joined{word-spacing:.18em}
-  .ayah.joined .w{display:inline;padding:1px 2px;border-radius:8px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+  .ayah.joined{word-spacing:normal;letter-spacing:0}
+  .ayah.joined .w{display:inline;padding:0;margin:0;border-radius:6px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+  .ayah.joined .wu{display:inline}
   .ayah.joined .w.ok{box-shadow:none;background:rgba(47,191,113,.16)}
   .ayah.joined .w.skip{box-shadow:none;background:rgba(47,191,113,.16)}
   .ayah.joined .w.bad{box-shadow:none;background:rgba(239,75,93,.20)}
@@ -385,6 +394,27 @@
   details.grp > summary{font-weight:800; letter-spacing:.02em}
   .sheet{backdrop-filter:blur(10px)}
 
+  /* ==== TOAST PANDUAN BACAAN (telefon) ==== */
+  @media (max-width:720px){
+    #status.status{
+      position:fixed; left:12px; right:12px; z-index:60;
+      bottom:calc(104px + env(safe-area-inset-bottom));
+      margin:0; padding:11px 14px;
+      background:color-mix(in oklab, var(--panel-2) 92%, transparent);
+      backdrop-filter:saturate(160%) blur(14px);
+      -webkit-backdrop-filter:saturate(160%) blur(14px);
+      border:1px solid var(--line);
+      border-left:3px solid color-mix(in oklab, var(--gold) 65%, transparent);
+      border-radius:14px; box-shadow:0 18px 40px -22px #000;
+      color:var(--text); font-size:13px; line-height:1.5;
+      opacity:0; transform:translateY(14px); pointer-events:none;
+      visibility:hidden;
+      transition:opacity .28s ease, transform .28s ease, visibility .28s;
+    }
+    #status.status.toast-on{
+      opacity:1; transform:translateY(0); visibility:visible; pointer-events:auto;
+    }
+  }
 </style>
 
 </head>
@@ -1246,6 +1276,7 @@ function resumeMicAuto(delay){
   muteTimer = setTimeout(()=>{
     micMuted = false;
     appSpeaking = false;
+    micGuardUntil = Date.now() + 700;   // ekor audio pembetulan tidak dikira sebagai bacaan
     if(mediaStream){ try{ mediaStream.getTracks().forEach(t=>t.enabled=true); }catch(e){} }
     if(listening){
       /* Sesi mungkin telah ditamatkan oleh pelayar semasa mic dibisukan —
@@ -1367,7 +1398,18 @@ let badTries=0, fixedOnce={};
 const MAX_TRIES = 3;
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-function setStatus(t){ $("status").textContent = t; }
+var _statusToastTimer = null;
+function setStatus(t){
+  var el = $("status"); if(!el) return;
+  el.textContent = t;
+  var isPhone = window.matchMedia && window.matchMedia("(max-width:720px)").matches;
+  if(!isPhone){ el.classList.remove("toast-on"); return; }
+  el.classList.remove("toast-on");
+  void el.offsetWidth;
+  el.classList.add("toast-on");
+  if(_statusToastTimer) clearTimeout(_statusToastTimer);
+  _statusToastTimer = setTimeout(function(){ el.classList.remove("toast-on"); }, 4000);
+}
 function currentAyah(){ return current.ayat[aIdx] || ""; }
 
 function applySettings(){
@@ -1477,7 +1519,7 @@ function render(){
   $("ayah-text").classList.toggle("fullpage", fullPage);
   const wordsHTML = w.map((t,i)=>{
     const cls = marks[i]==="ok"?"ok":marks[i]==="skip"?"skip":marks[i]==="bsm"?"bsm":marks[i]==="bad"?"bad":(i===cursor?"cur":"");
-    const inner = (S.tajwid && marks[i] !== "bad") ? tajwidHTML(t, w[i+1]) : escHtml(t);
+    const inner = S.tajwid ? tajwidHTML(t, w[i+1]) : escHtml(t);
     const word = `<span class="w ${cls}" data-i="${i}" role="button" tabindex="0" title="Tekan untuk dengar bacaan betul">${inner}</span>`;
     if(!gloss) return word;
     return `<span class="wu">${word}<span class="wt">${escHtml(gloss[i]||"")}</span></span>`;
@@ -1505,7 +1547,7 @@ function render(){
        ayat 1 pula dipaparkan dengan nombornya sendiri. */
     const parts = w.map((t,i)=>{
       const cls = marks[i]==="ok"?"ok":marks[i]==="skip"?"skip":marks[i]==="bsm"?"bsm":marks[i]==="bad"?"bad":(i===cursor?"cur":"");
-      const inner = (S.tajwid && marks[i] !== "bad") ? tajwidHTML(t, w[i+1]) : escHtml(t);
+      const inner = S.tajwid ? tajwidHTML(t, w[i+1]) : escHtml(t);
       const word = `<span class="w ${cls}" data-i="${i}" role="button" tabindex="0" title="Tekan untuk dengar bacaan betul">${inner}</span>`;
       if(!gloss) return word;
       return `<span class="wu">${word}<span class="wt">${escHtml(gloss[i]||"")}</span></span>`;
@@ -2187,6 +2229,7 @@ function stopMeter(){
    PENTING: setiap kali sesi dibuka, Chrome Android membunyikan "bib". Oleh itu
    kami HAD-KAN kekerapan buka sesi (throttle) supaya tiada bunyi bib berulang
    walaupun pelayar menamatkan sesi berkali-kali. */
+let micGuardUntil = 0;   // abaikan hasil pengecaman sebentar selepas audio app habis
 let lastRecStart = 0, recStartTimer = null;
 function safeStartRec(){
   if(!rec || !listening || recRunning || micMuted || appSpeaking) return;
@@ -2271,7 +2314,7 @@ async function startRec(){
   let segCut = {};            // index segmen → bilangan aksara yang dipotong
   rec.onresult=(ev)=>{
     gotAny = true;
-    if(micMuted || appSpeaking){
+    if(micMuted || appSpeaking || Date.now() < micGuardUntil){
       for(let i=ev.resultIndex;i<ev.results.length;i++){
         const t = (ev.results[i][0].transcript||"");
         segCut[i] = ev.results[i].isFinal ? Infinity : t.length;
@@ -2960,6 +3003,33 @@ boot();
     }
     return r;
   };
+
+  /* ===== Semakan salah HANYA selepas pembaca habis (hasil akhir) =====
+     Semasa pengguna masih membaca (hasil interim), perkataan betul tetap
+     bertanda hijau, tetapi TIADA tanda merah / teguran / audio pembetulan. */
+  (function(){
+    const _psInterim = window.processSpoken;
+    const _swc = window.scheduleWordCorrection;
+    let interimPass = false;
+    window.scheduleWordCorrection = function(){
+      if(interimPass) return;                 // jangan tegur semasa orang sedang baca
+      return _swc.apply(null, arguments);
+    };
+    window.processSpoken = function(text, isFinal){
+      if(isFinal) return _psInterim(text, true);
+      const before = marks.slice();
+      interimPass = true;
+      let r;
+      try{ r = _psInterim(text, false); }
+      finally{ interimPass = false; }
+      let changed = false;
+      for(let i=0;i<marks.length;i++){
+        if(marks[i] === "bad" && before[i] !== "bad"){ marks[i] = before[i] || null; changed = true; }
+      }
+      if(changed){ try{ render(); }catch(e){} }
+      return r;
+    };
+  })();
 
   /* Maklum balas selepas ayat selesai */
   const _ayahComplete = window.ayahComplete;
