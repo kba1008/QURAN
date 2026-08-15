@@ -666,7 +666,7 @@
 </div>
 
 <!-- Enjin fonetik Wasal (Tajwid) — perlu dimuat sebelum skrip utama -->
-<script src="./wasalEngine.js?v=34"></script>
+<script src="./wasalEngine.js?v=35"></script>
 
 <script>
 /* ============================================================
@@ -1027,6 +1027,11 @@ const QARI = [
 ];
 let player = null, playingIdx = -1, playingWord = -1, playSeq = 0;
 let correctionTimer = null, lastCorrectionKey = "", lastCorrectionAt = 0;
+/* SOP pembetulan: setiap perkataan yang pernah menjadi merah WAJIB dibacakan
+   tepat sekali. Set ini menghalang keputusan interim/final daripada memainkan
+   audio yang sama berkali-kali, manakala baris gilir memastikan permintaan
+   tidak hilang ketika audio lain masih berbunyi. */
+let correctionPlayed = new Set(), correctionQueue = [];
 /* App tidak menyampuk: teguran hanya dimainkan selepas pengguna benar-benar
    berhenti membaca (senyap sekurang-kurangnya QUIET_MS). */
 let lastUserSpeechAt = 0;
@@ -1134,7 +1139,7 @@ async function playAyah(i, opts){
     a.preload = "auto";
     a.playbackRate = safeRate();
     a.onerror = ()=>{ if(player===a){ tryPlay(); } };
-    a.onended = ()=>{ stopAudio(); if(opts.onend) opts.onend(); resumeMicAuto(0); };
+    a.onended = ()=>{ stopAudio(); if(opts.onend) opts.onend(); resumeMicAuto(0); pumpWordCorrections(); };
     player = a; playingIdx = idx;
     const btn = $("listen"); if(btn) btn.innerHTML = '<span class="di">■</span><span class="dl">Henti</span>';
     setStatus(`Mendengar bacaan betul — ${qari().name} · Ayat ${idx+1}.`);
@@ -1244,9 +1249,10 @@ function playWord(tokenIdx, ayahIdx){
   a.onerror = ()=>{
     if(player !== a) return;
     player = null;
-    if(!speakArabicWord(tokTxt)) playAyah(idx);   // sandaran: suara telefon, kemudian ayat penuh
+    if(!speakArabicWord(tokTxt)) playAyah(idx, {onend:pumpWordCorrections});
+    else setTimeout(pumpWordCorrections, 1800);
   };
-  a.onended = ()=>{ stopAudio(); resumeMicAuto(0); };
+  a.onended = ()=>{ stopAudio(); resumeMicAuto(0); pumpWordCorrections(); };
   player = a; playingIdx = idx; playingWord = tokenIdx;
   const btn = $("listen"); if(btn) btn.innerHTML = '<span class="di">■</span><span class="dl">Henti</span>';
   const tok = ayahTokens(current.ayat[idx]||"")[tokenIdx] || "";
@@ -1254,42 +1260,50 @@ function playWord(tokenIdx, ayahIdx){
   a.play().catch(()=>{
     if(player !== a) return;
     player = null;
-    if(!speakArabicWord(tok)) playAyah(idx);      // iOS menyekat main auto — guna suara telefon
+    if(!speakArabicWord(tok)) playAyah(idx, {onend:pumpWordCorrections});
+    else setTimeout(pumpWordCorrections, 1800);
   });
 }
-/* Satukan semua permintaan pembetulan bagi perkataan yang sama kepada satu
-   mainan audio penuh. Ini menghapuskan audio bertindih/tersangkut. */
+function pumpWordCorrections(){
+  clearTimeout(correctionTimer);
+  correctionTimer = null;
+  if(!correctionQueue.length) return;
+  if(appSpeaking || player || userStillReading()){
+    correctionTimer = setTimeout(pumpWordCorrections, userStillReading() ? QUIET_MS : 250);
+    return;
+  }
+  const job = correctionQueue.shift();
+  if(!job || aIdx !== job.ayah){ pumpWordCorrections(); return; }
+  const key = `${job.ayah}:${job.word}`;
+  if(correctionPlayed.has(key)){ pumpWordCorrections(); return; }
+  /* Tandakan sebelum play supaya callback pengecaman yang datang serentak tidak
+     sempat memasukkan audio kedua bagi perkataan yang sama. */
+  correctionPlayed.add(key);
+  lastCorrectionKey = key; lastCorrectionAt = Date.now();
+  playWord(job.word, job.ayah);
+}
+/* Masukkan pembetulan ke baris gilir. Walaupun markah kemudian berubah hijau
+   kerana pembaca membetulkannya dengan pantas, audio bagi tanda merah yang
+   sudah dipaparkan tetap ditunaikan sekali mengikut SOP. */
 function scheduleWordCorrection(tokenIdx, delay){
-  /* App hanya membetulkan perkataan MERAH (salah). Perkataan kuning (semasa)
-     dan hijau (sudah betul) tidak pernah dibetulkan. */
   if(marks[tokenIdx] !== "bad") return;
   const targetAyah = aIdx;
   const key = `${targetAyah}:${tokenIdx}`;
-  const now = Date.now();
-  /* Jika app SEDANG bercakap (audio pembetulan / terjemahan), jangan sekali-kali
-     ganggu — biar bacaan habis dulu supaya tidak tersangkut-sangkut. */
-  if(appSpeaking) return;
-  if((player && playingIdx === aIdx && playingWord === tokenIdx) ||
-     (key === lastCorrectionKey && now - lastCorrectionAt < 2200)) return;
-  clearTimeout(correctionTimer);
-  const fire = ()=>{
-    if(aIdx !== targetAyah || appSpeaking) return;
-    if(marks[tokenIdx] !== "bad") return;   // sudah bertukar hijau/kuning — jangan betulkan
-    /* Jangan menyampuk: kalau pengguna masih membaca, tunggu sehingga senyap. */
-    if(userStillReading()){
-      correctionTimer = setTimeout(fire, Math.max(200, QUIET_MS - (Date.now() - lastUserSpeechAt)));
-      return;
-    }
-    lastCorrectionKey = key; lastCorrectionAt = Date.now();
-    playWord(tokenIdx, targetAyah);
-  };
-  correctionTimer = setTimeout(fire, (typeof delay === "number") ? delay : 0);
+  if(correctionPlayed.has(key) || correctionQueue.some(j=>j.ayah===targetAyah && j.word===tokenIdx)) return;
+  correctionQueue.push({ ayah:targetAyah, word:tokenIdx });
+  correctionTimer = setTimeout(pumpWordCorrections, Math.max(0, Number(delay)||0));
 }
 /* Batalkan sebarang pembetulan yang sedang menunggu (cth. bila pembaca
    mengulang bacaan dari awal ayat). */
 function cancelWordCorrection(){
   clearTimeout(correctionTimer);
   correctionTimer = null;
+  correctionQueue = correctionQueue.filter(j=>j.ayah===aIdx);
+  if(correctionQueue.length) correctionTimer = setTimeout(pumpWordCorrections, 150);
+}
+function resetWordCorrections(){
+  clearTimeout(correctionTimer);
+  correctionTimer = null; correctionQueue = []; correctionPlayed.clear();
   lastCorrectionKey = ""; lastCorrectionAt = 0;
 }
 
@@ -1693,6 +1707,7 @@ function scrollTransIntoView(follow){
 function loadAyah(i,resetRep=true){
   if(!current) return;
   stopAudio();
+  resetWordCorrections();
   ayahSeq++; cancelTranslation();
   bestCursor = 0; bestMarks = [];
   aIdx = Math.max(0, Math.min(+i || 0, current.ayat.length-1));
@@ -1707,7 +1722,7 @@ function loadAyah(i,resetRep=true){
   saveResume();
   if(S.autoPlay) setTimeout(()=>playAyah(aIdx), 250);
 }
-function resetAyah(){ cursor=0; bestCursor=0; bestMarks=[]; marks=marks.map(()=>null); drillWord=-1; drillAt=0; badTries=0; fixedOnce={}; wordTries={}; stallTries={}; resetHeard(); applyBsmBarrier(); render(); }
+function resetAyah(){ resetWordCorrections(); cursor=0; bestCursor=0; bestMarks=[]; marks=marks.map(()=>null); drillWord=-1; drillAt=0; badTries=0; fixedOnce={}; wordTries={}; stallTries={}; resetHeard(); applyBsmBarrier(); render(); }
 
 function nextAyah(){
   if(aIdx+1 < current.ayat.length){ loadAyah(aIdx+1); return; }
@@ -2279,17 +2294,26 @@ function processSpokenCore(text, isFinal){
 function processSpoken(text, isFinal){
   const before = cursor;
   const blocked = cursor;
+  const triesBefore = triesOf(blocked);
   _noJudge = false;
   processSpokenCore(text, isFinal);
-  if(!isFinal || !current) return;
+  if(!current) return;
+  /* Apa-apa tanda merah yang pernah dipaparkan wajib mendapat audio pembetulan,
+     tanpa bergantung pada laluan enjin (wasal, latih tubi atau mod biasa). */
+  for(let i=0;i<marks.length;i++) if(marks[i] === "bad") scheduleWordCorrection(i, 0);
+  if(!isFinal) return;
   if(cursor > before){ stallTries = {}; return; }
   if(_noJudge) return;
   if(!words(text).length) return;
   const target = ayahTokens(currentAyah()).map(stripD);
   if(blocked >= target.length || isLocked(blocked)) return;
   if(blocked < bsmCount()) return;                 // Bismillah tidak pernah merah
-  const n = (stallTries[blocked] = (stallTries[blocked] | 0) + 1);
-  const tries = Math.max(n, triesOf(blocked));
+  /* Jangan kira keputusan final yang sama dua kali. Jika laluan utama sudah
+     menaikkan wordTries, guna nilai itu; jika belum, barulah kaunter penjaga
+     merekod satu cubaan. */
+  const handled = triesOf(blocked) > triesBefore;
+  const tries = handled ? triesOf(blocked) : addTry(blocked);
+  stallTries[blocked] = tries;
   if(tries > MAXT()){
     stallTries[blocked] = 0;
     autoPass(blocked);
@@ -2301,6 +2325,7 @@ function processSpoken(text, isFinal){
     marks[blocked] = "bad";
     setStatus(`Perkataan ini belum tepat (teguran ${tries}/${MAXT()}). Sila ulang.`);
     render();
+    scheduleWordCorrection(blocked, 0);
   }
 }
 
