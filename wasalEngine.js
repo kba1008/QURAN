@@ -260,10 +260,30 @@ class QuranWasalEngine {
   }
 
   static wasalVariants(word1, word2) {
-    const w1 = this.normalize(word1), w2 = this.normalize(word2);
-    const out = [`${w1} ${w2}`, `${w1}${w2}`, this.generateWasalPhonetic(word1, word2)];
+    return this.wasalChainVariants([word1, word2]);
+  }
+
+  /* Variasi bacaan bersambung untuk rantaian 2 perkataan atau lebih.
+     - bentuk berpisah (waqaf pada setiap perkataan)
+     - bentuk cantum tanpa hukum (STT kerap menulis begini)
+     - bentuk fonem wasal penuh mengikut hukum tajwid (buildStream)
+     - bentuk wasal separa: hukum antara pasangan berjiran sahaja */
+  static wasalChainVariants(list) {
+    const src = (list || []).filter(Boolean);
+    if (src.length < 2) return [];
+    const clean = src.map(w => this.normalize(w).replace(/\s+/g, "")).filter(Boolean);
+    if (clean.length < 2) return [];
+    const out = [clean.join(" "), clean.join("")];
+    out.push(this.buildStream(src, 0, src.length).seq);
+    let partial = "";
+    for (let i = 0; i < src.length - 1; i++) {
+      const pair = this.buildStream([src[i], src[i + 1]], 0, 2).seq;
+      partial = partial ? (partial + pair.slice(clean[i].length)) : pair;
+    }
+    out.push(partial);
     return [...new Set(out.map(v => (v || "").replace(/\s+/g, " ").trim()).filter(Boolean))];
   }
+
 
   /* Kekal untuk keserasian: pengesahan pendek berasaskan penjajaran */
   static verifyReading(userSpokenText, currentIndex, wordList) {

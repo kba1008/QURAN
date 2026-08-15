@@ -970,25 +970,32 @@ function similar(a,b){
 }
 /* Ketegasan (%) daripada tetapan -> ambang persamaan yang diperlukan. */
 const TOL = () => Math.min(1.00, Math.max(0.10, (S.tol||50)/100));
-/* --- PADANAN WASAL (bacaan bersambung 2 perkataan) ---
+/* --- PADANAN WASAL (bacaan bersambung 2-3 perkataan) ---
    Menggunakan wasalEngine.js: hukum Idgham Bilaghunnah/Bighunnah, Iqlab,
-   Alif Lam Shamsiyah + Levenshtein untuk ralat kecil sebutan.
-   Ambang fuzzy: 75%. */
-function wasalMatch(spoken, w1, w2){
+   Ikhfa, Alif Lam Shamsiyah, hamzah wasal + penjajaran fonem untuk ralat
+   kecil sebutan. Ambang fuzzy mengikut slider ketegasan, tetapi tidak
+   pernah lebih ketat daripada 0.88 supaya bacaan laju tidak dihukum. */
+function wasalMatchSeq(spoken, list){
   const E = (typeof window!=="undefined") ? window.QuranWasalEngine : null;
-  if(!E || !w1 || !w2) return false;
-  const sp  = E.removeTashkeel(spoken);
-  const spN = sp.replace(/\s+/g,"");
-  const vars = E.wasalVariants(w1, w2);
+  if(!E || !list || !list.length || list.some(w=>!w)) return false;
+  const spN = E.removeTashkeel(spoken).replace(/\s+/g,"");
+  if(spN.length < 2) return false;
+  const vars = (E.wasalChainVariants ? E.wasalChainVariants(list)
+                                     : E.wasalVariants(list[0], list[1]));
+  const need = Math.max(0.55, Math.min(0.88, TOL()));
   for(const v of vars){
-    const vN = v.replace(/\s+/g,"");
+    const vN = (v||"").replace(/\s+/g,"");
     if(!vN) continue;
-    if(spN === vN || spN.includes(vN)) return true;
-    if(E.calculateSimilarity(spN, vN) >= Math.min(0.75, TOL())) return true;
-    if(similar(spN, vN) >= TOL()) return true;
+    if(spN === vN) return true;
+    if(vN.length >= 5 && spN.includes(vN)) return true;
+    if(spN.length >= 5 && vN.includes(spN)) return true;
+    if(E.calculateSimilarity(spN, vN) >= need) return true;
+    if(similar(spN, vN) >= need) return true;
   }
   return false;
 }
+function wasalMatch(spoken, w1, w2){ return wasalMatchSeq(spoken, [w1, w2]); }
+
 /* Ambang lebih ketat untuk mengenal pasti perkataan yang SUDAH dibaca
    (elak kursor melompat kerana padanan longgar). */
 const TOL_BACK = () => Math.min(0.88, Math.max(TOL(), TOL() + 0.10));
@@ -1412,6 +1419,10 @@ let badTries=0, fixedOnce={};
    Kekal walaupun pembaca mengulang dari awal ayat / beberapa perkataan sebelum
    perkataan salah (adab bacaan bersama guru). Jadi teguran ke-3 tetap dikira. */
 let wordTries = {};
+/* Kaunter "tersekat": setiap bacaan muktamad yang tidak memajukan kursor. */
+let stallTries = {};
+/* Benar apabila app hanya MENDENGAR (ulangan / frasa kabur) — jangan hukum. */
+let _noJudge = false;
 function triesOf(i){ return wordTries[i] | 0; }
 function addTry(i){ return (wordTries[i] = triesOf(i) + 1); }
 function autoPass(i, msg){
@@ -1644,7 +1655,7 @@ function loadAyah(i,resetRep=true){
   ayahSeq++; cancelTranslation();
   bestCursor = 0; bestMarks = [];
   aIdx = Math.max(0, Math.min(+i || 0, current.ayat.length-1));
-  cursor=0; if(resetRep) repDone=0; drillWord=-1; drillAt=0; badTries=0; fixedOnce={}; wordTries={};
+  cursor=0; if(resetRep) repDone=0; drillWord=-1; drillAt=0; badTries=0; fixedOnce={}; wordTries={}; stallTries={};
   marks = new Array(ayahTokens(currentAyah()).length).fill(null);
   resetHeard(); applyBsmBarrier();
   $("ayah").value = aIdx;
@@ -1655,7 +1666,7 @@ function loadAyah(i,resetRep=true){
   saveResume();
   if(S.autoPlay) setTimeout(()=>playAyah(aIdx), 250);
 }
-function resetAyah(){ cursor=0; bestCursor=0; bestMarks=[]; marks=marks.map(()=>null); drillWord=-1; drillAt=0; badTries=0; fixedOnce={}; wordTries={}; resetHeard(); applyBsmBarrier(); render(); }
+function resetAyah(){ cursor=0; bestCursor=0; bestMarks=[]; marks=marks.map(()=>null); drillWord=-1; drillAt=0; badTries=0; fixedOnce={}; wordTries={}; stallTries={}; resetHeard(); applyBsmBarrier(); render(); }
 
 function nextAyah(){
   if(aIdx+1 < current.ayat.length){ loadAyah(aIdx+1); return; }
@@ -1926,7 +1937,7 @@ function isLocked(i){
   const m = marks[i];
   return m === "ok" || m === "skip" || m === "bsm";
 }
-function processSpoken(text, isFinal){
+function processSpokenCore(text, isFinal){
   if(!current) return;
   $("heard").textContent = text;
   const target = ayahTokens(currentAyah()).map(stripD);
@@ -1959,23 +1970,27 @@ function processSpoken(text, isFinal){
     }
     const avgNew = nU ? sumU / nU : 0;
     const anchored = AL && (nL > 0 || AL.startWord <= cursor);
-    if(AL && AL.spokenChars >= 3 && AL.confidence >= 0.50 && anchored && AL.advanceTo > floor){
+    const confGate = Math.min(0.50, Math.max(0.26, TOL() * 0.62));
+    if(AL && AL.spokenChars >= 3 && AL.confidence >= confGate && anchored && AL.advanceTo > floor){
       const thr = Math.min(0.95, TOL());
       /* Bacaan hanya menyentuh perkataan hijau (ulangan sebelum bersambung):
          dengar sahaja, jangan tanda apa-apa dan jangan undurkan kursor. */
       if(nU === 0){
         for(const w of words(text)) pushHeard(w);
         cancelWordCorrection();
+        _noJudge = true;
         setStatus("App mendengar ulangan bacaan anda — teruskan sambung ke perkataan seterusnya.");
         render();
         return;
       }
       if(avgNew < Math.min(0.72, TOL()) && !isFinal){
         for(const w of words(text)) pushHeard(w);
+        _noJudge = true;
         setStatus("App sedang mendengar sambungan bacaan…");
         render();
         return;
       }
+
       let firstBad = -1;
       const bsmN = bsmCount();
       for(let w = Math.max(floor, AL.startWord); w < AL.advanceTo && w < target.length; w++){
@@ -2053,9 +2068,11 @@ function processSpoken(text, isFinal){
       else {
         // Frasa masih kabur (perkataan berulang) — DENGAR dahulu, jangan hukum.
         cancelWordCorrection();
+        _noJudge = true;
         setStatus("App sedang mendengar — teruskan bacaan beberapa perkataan lagi.");
         continue;
       }
+
     }
     if(already >= 0){
       cancelWordCorrection();
@@ -2125,10 +2142,14 @@ function processSpoken(text, isFinal){
       marks[cursor]="ok"; marks[cursor+1]="ok"; cursor+=2; badTries=0; continue;
     }
     /* Padanan WASAL mengikut hukum tajwid (mis. مِن رَّبِّهِم، مِن بَعْد) —
-       bila dibaca bersambung, majukan kursor 2 perkataan. */
+       bila dibaca bersambung, majukan kursor 2 atau 3 perkataan. */
+    if(cursor+2 < target.length && wasalMatchSeq(spoken, [target[cursor],target[cursor+1],target[cursor+2]])){
+      marks[cursor]="ok"; marks[cursor+1]="ok"; marks[cursor+2]="ok"; cursor+=3; badTries=0; continue;
+    }
     if(cursor+1 < target.length && wasalMatch(spoken, target[cursor], target[cursor+1])){
       marks[cursor]="ok"; marks[cursor+1]="ok"; cursor+=2; badTries=0; continue;
     }
+
     // Perkataan hijau diulang baca — biar berkelip hijau sahaja, kursor kekal di tempatnya
     if(already >= 0){ flashWord = already; if(marks[already] !== "bad") marks[already] = "ok"; cursor = already + 1; badTries = 0; continue; }
     if(!judge) continue;                 // jangan hukum perkataan yang masih dituturkan
@@ -2175,6 +2196,40 @@ function processSpoken(text, isFinal){
     (S.freeFlow ? marks.every(m=>m) : marks.every(isDone));
   if(finished) ayahComplete();
 }
+
+/* ===== PENJAMIN HAD ULANGAN (tidak kira laluan mana pun) =====
+   Setiap kali app menerima bacaan MUKTAMAD tetapi kursor tidak bergerak,
+   ia dikira satu teguran bagi perkataan yang sedang menyekat. Bila jumlah
+   teguran melebihi had dalam Tetapan, perkataan itu terus diluluskan
+   (hijau) — jadi mustahil app menyuruh ulang lebih daripada had. */
+function processSpoken(text, isFinal){
+  const before = cursor;
+  const blocked = cursor;
+  _noJudge = false;
+  processSpokenCore(text, isFinal);
+  if(!isFinal || !current) return;
+  if(cursor > before){ stallTries = {}; return; }
+  if(_noJudge) return;
+  if(!words(text).length) return;
+  const target = ayahTokens(currentAyah()).map(stripD);
+  if(blocked >= target.length || isLocked(blocked)) return;
+  if(blocked < bsmCount()) return;                 // Bismillah tidak pernah merah
+  const n = (stallTries[blocked] = (stallTries[blocked] | 0) + 1);
+  const tries = Math.max(n, triesOf(blocked));
+  if(tries > MAXT()){
+    stallTries[blocked] = 0;
+    autoPass(blocked);
+    cursor = blocked + 1;
+    render();
+    return;
+  }
+  if(marks[blocked] !== "bad"){                    // bacaan salah WAJIB merah
+    marks[blocked] = "bad";
+    setStatus(`Perkataan ini belum tepat (teguran ${tries}/${MAXT()}). Sila ulang.`);
+    render();
+  }
+}
+
 
 /* ============ 8b. ENJIN AUDIO CANGGIH (percuma, dalam pelayar) ============
    Rantaian pemprosesan masa nyata:
