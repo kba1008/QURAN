@@ -120,12 +120,47 @@ class QuranWasalEngine {
     return { seq: seq.join(""), owner };
   }
 
-  /* ---------- 4. Matriks skor ---------- */
+  /* ---------- 4. Matriks skor + MEMORI ADAPTIF (otak AI di peranti) ----------
+     App belajar kekeliruan STT khusus untuk suara & peranti pengguna.
+     Setiap kali penjajaran berjaya, pasangan huruf yang kerap bertukar
+     diberi pemberat lebih baik, jadi semakan menjadi makin pintar. */
+  static MEM_KEY = "tasmi-ai-acoustic-v1";
+  static _mem = null;
+  static mem() {
+    if (this._mem) return this._mem;
+    this._mem = {};
+    try {
+      const raw = (typeof localStorage !== "undefined") && localStorage.getItem(this.MEM_KEY);
+      if (raw) this._mem = JSON.parse(raw) || {};
+    } catch (_) { this._mem = {}; }
+    return this._mem;
+  }
+  static _memDirty = false;
+  static learnPair(a, b) {
+    if (!a || !b || a === b) return;
+    const k = a < b ? a + b : b + a;
+    const m = this.mem();
+    m[k] = Math.min(20, (m[k] || 0) + 1);
+    this._memDirty = true;
+  }
+  static saveMemory() {
+    if (!this._memDirty) return;
+    try { localStorage.setItem(this.MEM_KEY, JSON.stringify(this.mem())); } catch (_) {}
+    this._memDirty = false;
+  }
+  static memBonus(a, b) {
+    const k = a < b ? a + b : b + a;
+    const n = this.mem()[k] || 0;
+    if (!n) return 0;
+    return Math.min(1.6, 0.35 * Math.log2(1 + n));   // makin kerap, makin dimaafkan
+  }
+
   static sub(a, b) {
     if (a === b) return 2.2;
     if (this.mapAcoustics(a) === this.mapAcoustics(b)) return 1.7;
-    if (this.nearSound(a, b)) return 1.0;
-    return -1.6;
+    if (this.nearSound(a, b)) return 1.0 + this.memBonus(a, b) * 0.5;
+    const bonus = this.memBonus(a, b);
+    return bonus ? Math.min(1.2, -1.6 + bonus * 1.9) : -1.6;
   }
   static GAP_OPEN = -2.0;
   static GAP_EXT = -0.45;              // mad / sisipan panjang murah
@@ -164,19 +199,21 @@ class QuranWasalEngine {
 
     // Traceback ringkas untuk kutip padanan setiap posisi target
     const matched = new Float64Array(m);
+    const confusions = [];
     let i = bi, j = bj, startJ = bj;
     let guard = (n + m) * 2;
     while (i > 0 && j > 0 && guard-- > 0) {
       const code = ptr[i * (m + 1) + j];
       if (code === 0) break;
       if (code === 1) {
-        const s = this.sub(spoken.charAt(i - 1), target.charAt(j - 1));
-        if (s > 0) matched[j - 1] = s / 2.2;
+        const sa = spoken.charAt(i - 1), tb = target.charAt(j - 1);
+        const s = this.sub(sa, tb);
+        if (s > 0) { matched[j - 1] = s / 2.2; if (sa !== tb) confusions.push([sa, tb]); }
         startJ = j; i--; j--;
       } else if (code === 2) { i--; }
       else { startJ = j; j--; }
     }
-    return { score: best, endJ: bj, startJ: Math.max(1, startJ), matched };
+    return { score: best, endJ: bj, startJ: Math.max(1, startJ), matched, confusions };
   }
 
   /* ---------- 6. API utama: penjajaran bacaan bersambung ---------- */
@@ -184,7 +221,7 @@ class QuranWasalEngine {
       wordList   : array perkataan ayat (tanpa baris pun boleh)
       cursor     : kedudukan semasa
       opts.floor : had undur paling awal (cth. selepas Bismillah)          */
-  static alignReading(spokenText, wordList, cursor, opts = {}) {
+  static alignWindow(spokenText, wordList, cursor, opts = {}) {
     const floor = Math.max(0, opts.floor || 0);
     const spoken = this.normalize(spokenText).replace(/\s+/g, "");
     if (spoken.length < 2 || !wordList || !wordList.length) return null;
@@ -224,8 +261,59 @@ class QuranWasalEngine {
 
     return {
       startWord, endWord, advanceTo, wordScores, confidence,
-      coveredChars: covered, spokenChars: spoken.length, score: al.score
+      coveredChars: covered, spokenChars: spoken.length, score: al.score,
+      confusions: al.confusions || [],
+      norm: al.score / Math.max(1, spoken.length * 2.2),
+      windowFrom: from, windowTo: to
     };
+  }
+
+  /* ---------- 6b. PENGESAN SAMBUNGAN & ULANG-BACA (bacaan wasal) ----------
+     Pembaca kerap mengulang beberapa perkataan SEBELUM perkataan yang salah,
+     kemudian menyambung (wasal) melepasi perkataan itu. Kami mencuba beberapa
+     jendela penjajaran (dari kursor, undur sederhana, dan undur penuh sehingga
+     awal ayat) lalu memilih penjajaran terbaik. Ini membolehkan app faham
+     bahawa bacaan itu SATU aliran bersambung, bukan perkataan terasing. */
+  static alignReading(spokenText, wordList, cursor, opts = {}) {
+    const floor = Math.max(0, opts.floor || 0);
+    const fullBack = Math.max(0, cursor - floor);
+    const backs = [...new Set([
+      opts.back == null ? 8 : opts.back,
+      Math.min(4, fullBack),
+      Math.min(12, fullBack),
+      fullBack
+    ])].filter(b => b >= 0).sort((a, b) => a - b);
+
+    let best = null;
+    for (const back of backs) {
+      const r = this.alignWindow(spokenText, wordList, cursor, { ...opts, back });
+      if (!r) continue;
+      /* Pilih penjajaran yang paling menyeluruh (liputan fonem) dan paling tepat */
+      const spokenLen = r.spokenChars || 1;
+      const cover = r.coveredChars / spokenLen;
+      const quality = r.norm * 0.65 + Math.min(1, cover) * 0.35;
+      r._q = quality;
+      if (!best || quality > best._q + 0.02 ||
+          (Math.abs(quality - best._q) <= 0.02 && r.advanceTo > best.advanceTo)) best = r;
+    }
+    if (!best) return null;
+
+    best.isBacktrack = best.startWord < cursor;
+    /* Perkataan pertama yang BELUM selesai dalam liputan bacaan ini */
+    const pending = opts.isDone;
+    let resumeWord = -1;
+    if (typeof pending === "function") {
+      for (let w = best.startWord; w <= best.endWord; w++) {
+        if (!pending(w)) { resumeWord = w; break; }
+      }
+    }
+    best.resumeWord = resumeWord;
+    /* Belajar daripada penjajaran yang yakin: kemas kini memori akustik */
+    if (best.confidence >= 0.62 && best.confusions) {
+      for (const [a, b] of best.confusions) this.learnPair(a, b);
+    }
+    if (best.confidence >= 0.55) this.saveMemory();
+    return best;
   }
 
   /* ---------- 7. Keserasian API lama (index.html) ---------- */

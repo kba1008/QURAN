@@ -6,9 +6,9 @@
 <title>Tasmi' — Semakan Bacaan Al-Quran</title>
 <meta name="description" content="Aplikasi PWA premium untuk menyemak bacaan Al-Quran secara langsung dengan pengecaman suara percuma, mod hafazan dan terjemahan Bahasa Melayu." />
 <meta name="theme-color" content="#0b1210" />
-<link rel="manifest" href="./manifest.json?v=31" />
-<link rel="icon" type="image/png" href="./icon-192.png?v=31" />
-<link rel="apple-touch-icon" href="./icon-192.png?v=31" />
+<link rel="manifest" href="./manifest.json?v=34" />
+<link rel="icon" type="image/png" href="./icon-192.png?v=34" />
+<link rel="apple-touch-icon" href="./icon-192.png?v=34" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Manrope:wght@400;600;800&display=swap" rel="stylesheet" />
@@ -666,7 +666,7 @@
 </div>
 
 <!-- Enjin fonetik Wasal (Tajwid) — perlu dimuat sebelum skrip utama -->
-<script src="./wasalEngine.js"></script>
+<script src="./wasalEngine.js?v=34"></script>
 
 <script>
 /* ============================================================
@@ -2005,14 +2005,20 @@ function processSpokenCore(text, isFinal){
      (Smith–Waterman + kekeliruan akustik). Ini membolehkan bacaan laju
      yang bersambung dikesan walaupun pelayar memecah/menggabung perkataan. */
   const ENG = (typeof window!=="undefined") ? window.QuranWasalEngine : null;
-  const drillLock = (!S.freeFlow && (S.drill || S.mustCorrect) && marks[cursor]==="bad");
-  if(ENG && ENG.alignReading && !drillLock && cursor < target.length){
+  /* Perkataan merah TIDAK lagi menyekat enjin penjajaran. Pembaca dibenarkan
+     mengulang beberapa perkataan sebelumnya dan menyambung (wasal) melepasi
+     perkataan merah itu — enjin akan mengenal aliran bacaan itu sebagai satu
+     sambungan dan membetulkan markah secara automatik. */
+  if(ENG && ENG.alignReading && cursor < target.length){
     /* Pengguna sering MENGULANG beberapa perkataan hijau dahulu, kemudian
        menyambung (wasal) ke perkataan yang belum dibaca. Jadi jendela undur
        dibuka sehingga awal ayat (selepas Bismillah) supaya sambungan itu
        dijajarkan dengan tepat mengikut hukum wasal/tajwid. */
     const backSpan = Math.max(8, cursor - floor);
-    const AL = ENG.alignReading(text, target, cursor, { floor, back: backSpan });
+    const AL = ENG.alignReading(text, target, cursor, {
+      floor, back: backSpan, ahead: 24,
+      isDone: (w)=> isLocked(w)                     // supaya enjin tahu di mana bacaan perlu disambung
+    });
     /* Penilaian HANYA pada perkataan yang belum hijau. Perkataan hijau tetap
        DIDENGAR (untuk menambat kedudukan bacaan bersambung) tetapi tidak
        dinilai, tidak menaikkan atau menjatuhkan skor, dan tidak boleh salah. */
@@ -2029,13 +2035,16 @@ function processSpokenCore(text, isFinal){
     const confGate = Math.min(0.50, Math.max(0.26, TOL() * 0.62));
     if(AL && AL.spokenChars >= 3 && AL.confidence >= confGate && anchored && AL.advanceTo > floor){
       const thr = Math.min(0.95, TOL());
+      /* Perkataan yang pernah cuba dibetulkan dinilai lebih longgar semasa
+         bacaan bersambung — pembaca sedang mengulang, bukan membaca perlahan. */
+      const thrOf = (w)=> (wordTries[w] || marks[w]==="bad") ? Math.max(0.55, thr - 0.12) : thr;
       /* Bacaan hanya menyentuh perkataan hijau (ulangan sebelum bersambung):
          dengar sahaja, jangan tanda apa-apa dan jangan undurkan kursor. */
       if(nU === 0){
         for(const w of words(text)) pushHeard(w);
         cancelWordCorrection();
         _noJudge = true;
-        setStatus("App mendengar ulangan bacaan anda — teruskan sambung ke perkataan seterusnya.");
+        setStatus("App faham anda sedang mengulang secara wasal — teruskan sambung ke perkataan seterusnya.");
         render();
         return;
       }
@@ -2053,7 +2062,10 @@ function processSpokenCore(text, isFinal){
         const sc = AL.wordScores[w];
         if(sc == null) continue;
         if(isLocked(w)) continue;                     // sudah hijau — jangan sentuh
-        if(sc >= thr){ marks[w] = "ok"; wordTries[w] = 0; }
+        if(sc >= thrOf(w)){
+          marks[w] = "ok"; wordTries[w] = 0;
+          if(drillWord === w){ drillWord = -1; cancelWordCorrection(); }
+        }
         else if(isFinal){
           /* Kiraan teguran juga dikira dalam laluan padanan bersambung (wasal).
              Jika sudah melebihi had ulangan dalam Tetapan, perkataan itu
@@ -2080,7 +2092,8 @@ function processSpokenCore(text, isFinal){
         setStatus("Teruskan bacaan — ada perkataan yang belum tepat.");
       } else {
         badTries = 0; drillWord = -1; cancelWordCorrection();
-        setStatus(nL > 0 ? "Sambungan bacaan dikesan — teruskan." : "Bacaan bersambung dikesan — teruskan.");
+        setStatus(AL.isBacktrack ? "Ulangan & sambungan wasal dikesan — bacaan anda diterima, teruskan."
+                                 : "Bacaan bersambung dikesan — teruskan.");
       }
       cursor = newCursor;
       render();
