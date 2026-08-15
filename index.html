@@ -1027,6 +1027,11 @@ const QARI = [
 ];
 let player = null, playingIdx = -1, playingWord = -1, playSeq = 0;
 let correctionTimer = null, lastCorrectionKey = "", lastCorrectionAt = 0;
+/* App tidak menyampuk: teguran hanya dimainkan selepas pengguna benar-benar
+   berhenti membaca (senyap sekurang-kurangnya QUIET_MS). */
+let lastUserSpeechAt = 0;
+const QUIET_MS = 1100;
+function userStillReading(){ return (Date.now() - lastUserSpeechAt) < QUIET_MS; }
 
 function qari(){ return QARI.find(q=>q.id===S.qari) || QARI[0]; }
 /* HUKUM TAJWID: bacaan tidak boleh dilajukan melebihi 1.0x kerana mempercepat
@@ -1267,12 +1272,18 @@ function scheduleWordCorrection(tokenIdx, delay){
   if((player && playingIdx === aIdx && playingWord === tokenIdx) ||
      (key === lastCorrectionKey && now - lastCorrectionAt < 2200)) return;
   clearTimeout(correctionTimer);
-  correctionTimer = setTimeout(()=>{
+  const fire = ()=>{
     if(aIdx !== targetAyah || appSpeaking) return;
     if(marks[tokenIdx] !== "bad") return;   // sudah bertukar hijau/kuning — jangan betulkan
+    /* Jangan menyampuk: kalau pengguna masih membaca, tunggu sehingga senyap. */
+    if(userStillReading()){
+      correctionTimer = setTimeout(fire, Math.max(200, QUIET_MS - (Date.now() - lastUserSpeechAt)));
+      return;
+    }
     lastCorrectionKey = key; lastCorrectionAt = Date.now();
     playWord(tokenIdx, targetAyah);
-  }, (typeof delay === "number") ? delay : 0);
+  };
+  correctionTimer = setTimeout(fire, (typeof delay === "number") ? delay : 0);
 }
 /* Batalkan sebarang pembetulan yang sedang menunggu (cth. bila pembaca
    mengulang bacaan dari awal ayat). */
@@ -1584,11 +1595,12 @@ function render(){
 
   if(fullPage){
     /* Seluruh surah dipaparkan seperti satu muka mushaf, disusun JUSTIFY.
-       Bismillah DIASINGKAN sebagai baris tersendiri di atas (tidak sebaris
-       dengan ayat 1). Semakan bacaan kekal seperti biasa. */
+       Bismillah SENTIASA berdiri sendiri pada baris di atas semua ayat. */
     const bsmHead = bsmN > 0;
+    const soloBsm = bsmWholeAyah();        // Al-Faatiha: Bismillah ialah ayat penuh
     let out = "";
     for(let ai=0; ai<current.ayat.length; ai++){
+      if(soloBsm && ai === 0) continue;    // dinaikkan ke baris Bismillah di atas
       if(ai === aIdx){
         const body = (ai===0 && bsmHead ? wordParts.slice(bsmN) : wordParts).join(" ");
         out += `<span class="ay cur-ay" data-a="${ai}">${body}<span class="ayno">${ai+1}</span></span> `;
@@ -1600,13 +1612,19 @@ function render(){
       }
     }
     let head = "";
-    if(bsmHead){
+    if(soloBsm){
+      const bsmBody = (aIdx===0)
+        ? wordParts.join(" ")
+        : ayahTokens(current.ayat[0]||"").map(t=>`<span class="wo">${S.tajwid?tajwidHTML(t):escHtml(t)}</span>`).join(" ");
+      head = `<div class="bsm-block"><div class="bsm-line">${bsmBody}</div></div><div class="bsm-gap" aria-hidden="true"></div>`;
+    } else if(bsmHead){
       const bsmBody = (aIdx===0)
         ? wordParts.slice(0,bsmN).join(" ")
         : ayahTokens(current.ayat[0]||"").slice(0,4).map(t=>`<span class="wo">${S.tajwid?tajwidHTML(t):escHtml(t)}</span>`).join(" ");
-      head = `<div class="bsm-block"><span class="bsm-cap">Bismillah · dibaca berasingan</span><div class="bsm-line">${bsmBody}</div></div><div class="bsm-gap" aria-hidden="true"></div>`;
+      head = `<div class="bsm-block"><div class="bsm-line">${bsmBody}</div></div><div class="bsm-gap" aria-hidden="true"></div>`;
     }
     $("ayah-text").innerHTML = head + `<div class="page-line">${out}</div>`;
+
   } else if(bsmSplit){
     /* Bismillah dipaparkan sebagai blok berasingan di atas ayat 1 (tanpa nombor),
        ayat 1 pula bermula pada baris baharu dengan nombornya sendiri. */
@@ -1618,14 +1636,18 @@ function render(){
       return `<span class="wu">${word}<span class="wt">${escHtml(gloss[i]||"")}</span></span>`;
     });
     $("ayah-text").innerHTML =
-      `<div class="bsm-block"><span class="bsm-cap">Bismillah · dibaca berasingan</span>` +
+      `<div class="bsm-block">` +
       `<div class="bsm-line">${parts.slice(0,bsmN).join(" ")}</div></div>` +
       `<div class="bsm-gap" aria-hidden="true"></div>` +
       `<div class="ayah-line">${parts.slice(bsmN).join(" ")}<span class="ayno">${aIdx+1}</span></div>`;
 
   } else {
-    $("ayah-text").innerHTML = `<div class="ayah-line">${wordsHTML}<span class="ayno">${aIdx+1}</span></div>`;
+    /* Ayat lain: Bismillah tetap dipaparkan sendiri pada baris di atas
+       (rujukan sahaja, tidak disemak) untuk semua surah kecuali At-Taubah. */
+    const refHead = staticBsmHead();
+    $("ayah-text").innerHTML = refHead + `<div class="ayah-line">${wordsHTML}<span class="ayno">${aIdx+1}</span></div>`;
   }
+
 
   /* Bismillah bukan sebahagian ayat 1 — ia tidak dikira dalam peratusan ayat */
   const nB = bsmCount();
@@ -1871,6 +1893,21 @@ function ayahComplete(){
    di dalam ayat, jadi app tersalah undur ke Bismillah lalu tersangkut. */
 /* Bilangan token Bismillah pada ayat 1 surah semasa (untuk paparan satu muka,
    walaupun pembaca sedang berada pada ayat lain). */
+function staticBsmHead(){
+  /* Baris Bismillah rujukan (bukan sebahagian semakan) untuk semua surah
+     kecuali At-Taubah (surah 9). */
+  if(!current || current.n === 9) return "";
+  const toks = ayahTokens(BISMILLAH);
+  const body = toks.map(t=>`<span class="wo">${S.tajwid?tajwidHTML(t):escHtml(t)}</span>`).join(" ");
+  return `<div class="bsm-block"><div class="bsm-line">${body}</div></div><div class="bsm-gap" aria-hidden="true"></div>`;
+}
+function bsmWholeAyah(){
+  /* Sesetengah mushaf (Al-Faatiha) mengira Bismillah sebagai ayat 1 penuh.
+     Dalam kes ini ayat itu dipaparkan sendiri di atas semua ayat lain. */
+  if(!current || !current.ayat || !current.ayat.length) return false;
+  const t = ayahTokens(current.ayat[0] || "");
+  return t.length === 4 && stripD(t.join(" ")) === stripD(BISMILLAH);
+}
 function pageBsmCount(){
   if(!current || current.n === 1 || current.n === 9) return 0;
   return bsmHeadN(ayahTokens(current.ayat[0] || ""));
@@ -2327,7 +2364,7 @@ async function startMeter(){
       // lantai bising adaptif (dikemas kini hanya semasa senyap)
       const speech = rms > Math.max(noiseFloor*3.2, 0.006) && band > 0.045 && centroid > 180 && zcr < .35;
       if(!speech) noiseFloor = noiseFloor*0.97 + rms*0.03;
-      else lastVoiceAt = Date.now();
+      else { lastVoiceAt = Date.now(); lastUserSpeechAt = lastVoiceAt; }
       vadOn = speech;
 
       const snr = 20*Math.log10((rms+1e-7)/(noiseFloor+1e-7));
@@ -2447,6 +2484,7 @@ async function startRec(){
   let segCut = {};            // index segmen → bilangan aksara yang dipotong
   rec.onresult=(ev)=>{
     gotAny = true;
+    if(!micMuted && !appSpeaking) lastUserSpeechAt = Date.now();
     if(micMuted || appSpeaking || Date.now() < micGuardUntil){
       for(let i=ev.resultIndex;i<ev.results.length;i++){
         const t = (ev.results[i][0].transcript||"");
