@@ -6,9 +6,9 @@
 <title>Tasmi' — Semakan Bacaan Al-Quran</title>
 <meta name="description" content="Aplikasi PWA premium untuk menyemak bacaan Al-Quran secara langsung dengan pengecaman suara percuma, mod hafazan dan terjemahan Bahasa Melayu." />
 <meta name="theme-color" content="#0b1210" />
-<link rel="manifest" href="./manifest.json?v=30" />
-<link rel="icon" type="image/png" href="./icon-192.png?v=30" />
-<link rel="apple-touch-icon" href="./icon-192.png?v=30" />
+<link rel="manifest" href="./manifest.json?v=31" />
+<link rel="icon" type="image/png" href="./icon-192.png?v=31" />
+<link rel="apple-touch-icon" href="./icon-192.png?v=31" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Manrope:wght@400;600;800&display=swap" rel="stylesheet" />
@@ -34,21 +34,30 @@
   }
   .ayah.fullpage .bsm-line{ text-align:center; text-align-last:center; }
 
-  /* ==== BISMILLAH DIASINGKAN DARIPADA AYAT ==== */
+  /* ==== BISMILLAH DIASINGKAN SEPENUHNYA DARIPADA AYAT PERTAMA ==== */
+  .ayah .bsm-block{
+    display:block; margin:.1em auto .75em; padding:.35em .5em .55em;
+    border:1px solid var(--line); border-radius:14px;
+    background:var(--soft);
+  }
+  .ayah .bsm-cap{
+    display:block; font-family:Manrope,system-ui,sans-serif; font-size:.30em;
+    letter-spacing:.14em; text-transform:uppercase; color:var(--muted);
+    text-align:center; text-align-last:center; line-height:1.6; margin-bottom:.2em;
+  }
   .ayah .bsm-line{
     display:block; text-align:center; text-align-last:center; font-size:.86em; line-height:2;
-    padding-bottom:.25em;
   }
-  /* Satu garisan pemisah sahaja antara Bismillah dan ayat */
+  /* Jurang jelas antara Bismillah dan permulaan ayat 1 */
   .ayah .bsm-gap{
-    display:block; height:0; margin:.15em auto .6em; width:92%;
-    border-top:1px solid var(--line);
+    display:block; height:.55em;
   }
   /* Ayat Quran disusun JUSTIFY supaya memenuhi ruang paparan dengan kemas */
   .ayah .ayah-line{
-    display:block; text-align:justify; text-justify:inter-word; text-align-last:right;
+    display:block; clear:both; text-align:justify; text-justify:inter-word; text-align-last:right;
   }
-  .ayah .bsm-line .w{ opacity:.9; }
+  .ayah .bsm-line .w{ opacity:.95; }
+
   .ayah .ayah-line .ayno{
     display:inline-block; font-family:Manrope,system-ui,sans-serif; font-size:.42em;
     color:var(--gold); border:1px solid var(--line); border-radius:999px;
@@ -570,9 +579,9 @@
           <div class="hint" id="dl-offline-st">Teks &amp; terjemahan semua 114 surah akan disimpan dalam telefon.</div>
         </div>
         <div class="fld">
-          <label>Maksimum ulangan bagi perkataan yang salah: <b id="maxtries-val">2</b></label>
+          <label>Maksimum ulangan bagi perkataan yang salah: <b id="maxtries-val">1</b></label>
           <input type="range" id="set-maxtries" min="1" max="5" step="1" />
-          <div class="hint">App akan menegur perkataan yang salah sebanyak bilangan ini sahaja. Selepas itu perkataan diluluskan (hijau) automatik supaya bacaan tidak tersangkut.</div>
+          <div class="hint">Lalai: 1 kali. App akan menegur perkataan merah sebanyak bilangan ini sahaja. Selepas itu perkataan diluluskan (hijau) automatik supaya bacaan tidak tersangkut.</div>
         </div>
         <div class="fld">
           <label>Ketegasan semakan (toleransi sebutan): <b id="tol-val">50%</b></label>
@@ -845,7 +854,7 @@ const LS = {
 /* ============ 2. TETAPAN PER-PENGGUNA ============ */
 const DEFAULTS = {
   showText:true, showTrans:true, speakTrans:true, hafazan:false, strict:true,
-  repeat:3, maxTries:2, size:40, tsize:21, rate:1, tol:45, voice:"",
+  repeat:3, maxTries:1, size:40, tsize:21, rate:1, tol:45, voice:"",
   qari:"ar.alafasy", arate:1, autoFix:true, autoPlay:false,
   theme:"sky", tajwid:true, autoMic:true, mustCorrect:true, transDelay:1000, keepAwake:true,
   drill:false, transPos:"ayat", freeFlow:false, wbw:true, hideHdr:true, textMode:"gabung",
@@ -1246,6 +1255,9 @@ function playWord(tokenIdx, ayahIdx){
 /* Satukan semua permintaan pembetulan bagi perkataan yang sama kepada satu
    mainan audio penuh. Ini menghapuskan audio bertindih/tersangkut. */
 function scheduleWordCorrection(tokenIdx, delay){
+  /* App hanya membetulkan perkataan MERAH (salah). Perkataan kuning (semasa)
+     dan hijau (sudah betul) tidak pernah dibetulkan. */
+  if(marks[tokenIdx] !== "bad") return;
   const targetAyah = aIdx;
   const key = `${targetAyah}:${tokenIdx}`;
   const now = Date.now();
@@ -1257,6 +1269,7 @@ function scheduleWordCorrection(tokenIdx, delay){
   clearTimeout(correctionTimer);
   correctionTimer = setTimeout(()=>{
     if(aIdx !== targetAyah || appSpeaking) return;
+    if(marks[tokenIdx] !== "bad") return;   // sudah bertukar hijau/kuning — jangan betulkan
     lastCorrectionKey = key; lastCorrectionAt = Date.now();
     playWord(tokenIdx, targetAyah);
   }, (typeof delay === "number") ? delay : 0);
@@ -1435,7 +1448,7 @@ function autoPass(i, msg){
    Maka bacaan itu DILULUSKAN supaya pembaca tidak tersangkut. */
 /* Bilangan teguran maksimum boleh diubah dalam Tetapan (1-5).
    Selepas melebihi had ini, perkataan diluluskan (hijau) automatik. */
-function MAXT(){ const v = +(S && S.maxTries); return (v>=1 && v<=5) ? v : 2; }
+function MAXT(){ const v = +(S && S.maxTries); return (v>=1 && v<=5) ? v : 1; }
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 var _statusToastTimer = null;
@@ -1494,7 +1507,7 @@ let flashWord=-1;
 function updateSkipBtn(){
   const btn = $("skip"); if(!btn) return;
   const hasBad = marks.some(m=>m==="bad");
-  const allow = S.freeFlow ? true : (hasBad && Math.max(badTries, triesOf(cursor)) >= 2);
+  const allow = S.freeFlow ? true : (hasBad && Math.max(badTries, triesOf(cursor)) >= MAXT());
   btn.disabled = !allow;
   btn.title = allow ? "Langkau perkataan ini" : "Ulang baca sekurang-kurangnya 2 kali sebelum boleh langkau";
 }
@@ -1591,12 +1604,12 @@ function render(){
       const bsmBody = (aIdx===0)
         ? wordParts.slice(0,bsmN).join(" ")
         : ayahTokens(current.ayat[0]||"").slice(0,4).map(t=>`<span class="wo">${S.tajwid?tajwidHTML(t):escHtml(t)}</span>`).join(" ");
-      head = `<div class="bsm-line">${bsmBody}</div><div class="bsm-gap" aria-hidden="true"></div>`;
+      head = `<div class="bsm-block"><span class="bsm-cap">Bismillah · dibaca berasingan</span><div class="bsm-line">${bsmBody}</div></div><div class="bsm-gap" aria-hidden="true"></div>`;
     }
     $("ayah-text").innerHTML = head + `<div class="page-line">${out}</div>`;
   } else if(bsmSplit){
-    /* Bismillah dipaparkan sebagai baris berasingan di atas ayat 1 (tanpa nombor),
-       ayat 1 pula dipaparkan dengan nombornya sendiri. */
+    /* Bismillah dipaparkan sebagai blok berasingan di atas ayat 1 (tanpa nombor),
+       ayat 1 pula bermula pada baris baharu dengan nombornya sendiri. */
     const parts = w.map((t,i)=>{
       const cls = marks[i]==="ok"?"ok":marks[i]==="skip"?"skip":marks[i]==="bsm"?"bsm":marks[i]==="bad"?"bad":(i===cursor?"cur":"");
       const inner = S.tajwid ? tajwidHTML(t, w[i+1]) : escHtml(t);
@@ -1605,15 +1618,21 @@ function render(){
       return `<span class="wu">${word}<span class="wt">${escHtml(gloss[i]||"")}</span></span>`;
     });
     $("ayah-text").innerHTML =
-      `<div class="bsm-line">${parts.slice(0,bsmN).join(" ")}</div>` +
+      `<div class="bsm-block"><span class="bsm-cap">Bismillah · dibaca berasingan</span>` +
+      `<div class="bsm-line">${parts.slice(0,bsmN).join(" ")}</div></div>` +
       `<div class="bsm-gap" aria-hidden="true"></div>` +
       `<div class="ayah-line">${parts.slice(bsmN).join(" ")}<span class="ayno">${aIdx+1}</span></div>`;
+
   } else {
     $("ayah-text").innerHTML = `<div class="ayah-line">${wordsHTML}<span class="ayno">${aIdx+1}</span></div>`;
   }
 
-  const done = marks.filter(m=>m==="ok" || m==="skip" || m==="bsm").length;
-  const pct = w.length? Math.round(done/w.length*100):0;
+  /* Bismillah bukan sebahagian ayat 1 — ia tidak dikira dalam peratusan ayat */
+  const nB = bsmCount();
+  const ayWords = w.slice(nB);
+  const done = marks.slice(nB).filter(m=>m==="ok" || m==="skip" || m==="bsm").length;
+  const pct = ayWords.length? Math.round(done/ayWords.length*100):0;
+
   $("score").textContent = pct+"%";
   $("prog").style.width = pct+"%";
   $("label").textContent = `${current.name} · Ayat ${aIdx+1} / ${current.ayat.length}`;
@@ -2137,18 +2156,23 @@ function processSpokenCore(text, isFinal){
     }
     /* Melangkau perkataan yang salah TIDAK dibenarkan: kami tidak lagi
        "melompat" ke perkataan berikutnya walaupun ia dipadankan. */
+    /* Bismillah WAJIB berhenti (waqaf) sebelum ayat 1: tiada gabungan/wasal
+       yang merentasi sempadan Bismillah → ayat 1. */
+    const _nb = bsmCount();
+    const noCross = (a,b)=> !(_nb && a < _nb && b >= _nb);
     // gabungan dua perkataan target (cth. dibaca bersambung)
-    if(cursor+1 < target.length && similar(spoken, target[cursor]+target[cursor+1]) >= TOL()){
+    if(cursor+1 < target.length && noCross(cursor,cursor+1) && similar(spoken, target[cursor]+target[cursor+1]) >= TOL()){
       marks[cursor]="ok"; marks[cursor+1]="ok"; cursor+=2; badTries=0; continue;
     }
     /* Padanan WASAL mengikut hukum tajwid (mis. مِن رَّبِّهِم، مِن بَعْد) —
        bila dibaca bersambung, majukan kursor 2 atau 3 perkataan. */
-    if(cursor+2 < target.length && wasalMatchSeq(spoken, [target[cursor],target[cursor+1],target[cursor+2]])){
+    if(cursor+2 < target.length && noCross(cursor,cursor+2) && wasalMatchSeq(spoken, [target[cursor],target[cursor+1],target[cursor+2]])){
       marks[cursor]="ok"; marks[cursor+1]="ok"; marks[cursor+2]="ok"; cursor+=3; badTries=0; continue;
     }
-    if(cursor+1 < target.length && wasalMatch(spoken, target[cursor], target[cursor+1])){
+    if(cursor+1 < target.length && noCross(cursor,cursor+1) && wasalMatch(spoken, target[cursor], target[cursor+1])){
       marks[cursor]="ok"; marks[cursor+1]="ok"; cursor+=2; badTries=0; continue;
     }
+
 
     // Perkataan hijau diulang baca — biar berkelip hijau sahaja, kursor kekal di tempatnya
     if(already >= 0){ flashWord = already; if(marks[already] !== "bad") marks[already] = "ok"; cursor = already + 1; badTries = 0; continue; }
@@ -2496,8 +2520,8 @@ $("mic").onclick = ()=>{
 $("skip").onclick = ()=>{
   const t = ayahTokens(currentAyah());
   const hasBad = marks.some(m=>m==="bad");
-  if(!S.freeFlow && (!hasBad || Math.max(badTries, triesOf(cursor)) < 2)){
-    setStatus("Sila ulang baca perkataan merah sekurang-kurangnya 2 kali sebelum melangkau.");
+  if(!S.freeFlow && (!hasBad || Math.max(badTries, triesOf(cursor)) < MAXT())){
+    setStatus(`Sila ulang baca perkataan merah sekurang-kurangnya ${MAXT()} kali sebelum melangkau.`);
     beep("err"); updateSkipBtn(); return;
   }
   if(cursor < t.length){
