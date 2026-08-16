@@ -6,9 +6,9 @@
 <title>Tasmi' — Semakan Bacaan Al-Quran</title>
 <meta name="description" content="Aplikasi PWA premium untuk menyemak bacaan Al-Quran secara langsung dengan pengecaman suara percuma, mod hafazan dan terjemahan Bahasa Melayu." />
 <meta name="theme-color" content="#0b1210" />
-<link rel="manifest" href="./manifest.json?v=38" />
-<link rel="icon" type="image/png" href="./icon-192.png?v=38" />
-<link rel="apple-touch-icon" href="./icon-192.png?v=38" />
+<link rel="manifest" href="./manifest.json?v=39" />
+<link rel="icon" type="image/png" href="./icon-192.png?v=39" />
+<link rel="apple-touch-icon" href="./icon-192.png?v=39" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Manrope:wght@400;600;800&display=swap" rel="stylesheet" />
@@ -667,7 +667,7 @@
 </div>
 
 <!-- Enjin fonetik Wasal (Tajwid) — perlu dimuat sebelum skrip utama -->
-<script src="./wasalEngine.js?v=38"></script>
+<script src="./wasalEngine.js?v=39"></script>
 
 <script>
 /* ============================================================
@@ -1346,7 +1346,7 @@ function resumeMicAuto(delay){
   muteTimer = setTimeout(()=>{
     micMuted = false;
     appSpeaking = false;
-    micGuardUntil = Date.now() + 700;   // ekor audio pembetulan tidak dikira sebagai bacaan
+    micGuardUntil = Date.now() + 220;   // ekor audio pembetulan tidak dikira sebagai bacaan
     if(mediaStream){ try{ mediaStream.getTracks().forEach(t=>t.enabled=true); }catch(e){} }
     if(listening){
       /* Sesi mungkin telah ditamatkan oleh pelayar semasa mic dibisukan —
@@ -2557,16 +2557,27 @@ async function startRec(){
     if(micMuted || appSpeaking || Date.now() < micGuardUntil){
       for(let i=ev.resultIndex;i<ev.results.length;i++){
         const t = (ev.results[i][0].transcript||"");
-        segCut[i] = ev.results[i].isFinal ? Infinity : t.length;
+        /* Simpan teks sebenar yang tercemar, bukan panjangnya sahaja. Enjin STT
+           kerap menulis semula seluruh interim; potongan berasaskan panjang akan
+           membuang permulaan bacaan ulangan yang sah dan nampak seperti app tidak
+           memberi respons. */
+        segCut[i] = { text:t, final:!!ev.results[i].isFinal };
       }
       return;
     }
     for(let i=ev.resultIndex;i<ev.results.length;i++){
 
       const r=ev.results[i];
-      if(segCut[i] === Infinity){ if(r.isFinal) continue; segCut[i] = (r[0].transcript||"").length; }
-      const cut = segCut[i] || 0;
-      let txt = (r[0].transcript||"").slice(cut).trim();
+      const fullTxt = (r[0].transcript||"");
+      const blocked = segCut[i];
+      if(blocked && blocked.final){
+        if(r.isFinal){ delete segCut[i]; delete snaps[i]; continue; }
+        delete segCut[i]; delete snaps[i];
+      }
+      /* Buang hanya awalan tercemar jika ia masih wujud tepat dalam transkrip.
+         Jika STT sudah menulis semula segmen, baca keseluruhan teks baharu terus. */
+      const prefix = blocked && !blocked.final ? blocked.text : "";
+      let txt = (prefix && fullTxt.startsWith(prefix) ? fullTxt.slice(prefix.length) : fullTxt).trim();
       if(!txt) continue;
       // Teks interim sering DIKEMASKINI/DIBETULKAN oleh enjin, jadi setiap kali kita
       // ulang-semak keseluruhan segmen bermula daripada keadaan sebelum segmen ini.
