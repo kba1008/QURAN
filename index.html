@@ -6,9 +6,9 @@
 <title>Tasmi' — Semakan Bacaan Al-Quran</title>
 <meta name="description" content="Aplikasi PWA premium untuk menyemak bacaan Al-Quran secara langsung dengan pengecaman suara percuma, mod hafazan dan terjemahan Bahasa Melayu." />
 <meta name="theme-color" content="#0b1210" />
-<link rel="manifest" href="./manifest.json?v=34" />
-<link rel="icon" type="image/png" href="./icon-192.png?v=34" />
-<link rel="apple-touch-icon" href="./icon-192.png?v=34" />
+<link rel="manifest" href="./manifest.json?v=36" />
+<link rel="icon" type="image/png" href="./icon-192.png?v=36" />
+<link rel="apple-touch-icon" href="./icon-192.png?v=36" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Manrope:wght@400;600;800&display=swap" rel="stylesheet" />
@@ -166,7 +166,8 @@
   .w.bad .tj-m6{color:#8f1206}.w.bad .tj-m4{color:#8a5c00}.w.bad .tj-m2{color:#1c3aa8}
   .w.bad .tj-ghn{color:#9c4300}.w.bad .tj-ikh{color:#5b0069}.w.bad .tj-idg{color:#0a5c47}
   .w.bad .tj-idgw{color:#3f3f3f}.w.bad .tj-iql{color:#0a6d92}.w.bad .tj-qal{color:#8c0005}
-  .w.cur{background:rgba(216,182,120,.16);box-shadow:inset 0 0 0 1px rgba(216,182,120,.45)}
+  .w.cur{background:rgba(255,214,0,.34);box-shadow:inset 0 0 0 2px rgba(255,196,0,.75);color:#1a1200}
+  .w.cur [class^="tj-"]{color:inherit}
   .w{cursor:pointer}
   /* ===== Mod tulisan bersambung (seperti mushaf biasa) ===== */
   .ayah.joined{word-spacing:-0.06em;letter-spacing:0;text-align:right}
@@ -175,8 +176,8 @@
   .ayah.joined .w.ok{box-shadow:none;background:rgba(47,191,113,.16)}
   .ayah.joined .w.skip{box-shadow:none;background:rgba(47,191,113,.16)}
   .ayah.joined .w.bad{box-shadow:none;background:rgba(239,75,93,.20)}
-  .ayah.joined .w.cur{box-shadow:none;background:rgba(216,182,120,.22);
-    border-bottom:2px solid var(--gold)}
+  .ayah.joined .w.cur{box-shadow:none;background:rgba(255,214,0,.32);color:#1a1200;
+    border-bottom:2px solid #ffc400}
   /* ===== Mod tulisan dipecahkan mengikut perkataan ===== */
   .ayah.split{word-spacing:normal;line-height:2.15}
   .ayah.split .w{margin:3px 4px}
@@ -478,7 +479,7 @@
     <div class="legend">
       <span><i class="dot" style="background:var(--green)"></i>Betul</span>
       <span><i class="dot" style="background:var(--red)"></i>Salah</span>
-      <span><i class="dot" style="background:var(--gold)"></i>Sedang dibaca</span>
+      <span><i class="dot" style="background:#ffd600"></i>Perlu dibaca</span>
       <span id="rep-badge" hidden></span>
     </div>
     <div class="tj-key" id="tj-key" hidden>
@@ -584,7 +585,7 @@
           <div class="hint">Lalai: 1 kali. App akan menegur perkataan merah sebanyak bilangan ini sahaja. Selepas itu perkataan diluluskan (hijau) automatik supaya bacaan tidak tersangkut.</div>
         </div>
         <div class="fld">
-          <label>Ketegasan semakan (toleransi sebutan): <b id="tol-val">50%</b></label>
+          <label>Ketegasan semakan (toleransi sebutan): <b id="tol-val">20%</b></label>
           <input type="range" id="set-tol" min="10" max="100" step="1" />
           <div class="hint">Semakin tinggi, semakin tepat sebutan diperlukan. 10–30% sangat memaafkan (sesuai untuk hafiz/bacaan laju); 40–65% longgar; 80%+ ketat; 100% menuntut huruf betul-betul tepat.</div>
         </div>
@@ -666,7 +667,7 @@
 </div>
 
 <!-- Enjin fonetik Wasal (Tajwid) — perlu dimuat sebelum skrip utama -->
-<script src="./wasalEngine.js?v=35"></script>
+<script src="./wasalEngine.js?v=36"></script>
 
 <script>
 /* ============================================================
@@ -854,7 +855,7 @@ const LS = {
 /* ============ 2. TETAPAN PER-PENGGUNA ============ */
 const DEFAULTS = {
   showText:true, showTrans:true, speakTrans:true, hafazan:false, strict:true,
-  repeat:3, maxTries:1, size:40, tsize:21, rate:1, tol:45, voice:"",
+  repeat:3, maxTries:1, size:40, tsize:21, rate:1, tol:20, voice:"",
   qari:"ar.alafasy", arate:1, autoFix:true, autoPlay:false,
   theme:"sky", tajwid:true, autoMic:true, mustCorrect:true, transDelay:1000, keepAwake:true,
   drill:false, transPos:"ayat", freeFlow:false, wbw:true, hideHdr:true, textMode:"gabung",
@@ -978,7 +979,7 @@ function similar(a,b){
   return sc;
 }
 /* Ketegasan (%) daripada tetapan -> ambang persamaan yang diperlukan. */
-const TOL = () => Math.min(1.00, Math.max(0.10, (S.tol||50)/100));
+const TOL = () => Math.min(1.00, Math.max(0.10, (S.tol||20)/100));
 /* --- PADANAN WASAL (bacaan bersambung 2-3 perkataan) ---
    Menggunakan wasalEngine.js: hukum Idgham Bilaghunnah/Bighunnah, Iqlab,
    Ikhfa, Alif Lam Shamsiyah, hamzah wasal + penjajaran fonem untuk ralat
@@ -1275,21 +1276,29 @@ function pumpWordCorrections(){
   const job = correctionQueue.shift();
   if(!job || aIdx !== job.ayah){ pumpWordCorrections(); return; }
   const key = `${job.ayah}:${job.word}`;
-  if(correctionPlayed.has(key)){ pumpWordCorrections(); return; }
+  /* Hijau semasa menunggu giliran → jangan tegur lagi. */
+  if(marks[job.word] !== "bad" || (typeof isLocked === "function" && isLocked(job.word))){ pumpWordCorrections(); return; }
+  if((correctionCount[key]|0) >= MAXT()){ pumpWordCorrections(); return; }
+  correctionCount[key] = (correctionCount[key]|0) + 1;
   /* Tandakan sebelum play supaya callback pengecaman yang datang serentak tidak
      sempat memasukkan audio kedua bagi perkataan yang sama. */
-  correctionPlayed.add(key);
   lastCorrectionKey = key; lastCorrectionAt = Date.now();
   playWord(job.word, job.ayah);
 }
+let correctionCount = {};   // {ayah:word -> bilangan teguran yang sudah dimainkan}
 /* Masukkan pembetulan ke baris gilir. Walaupun markah kemudian berubah hijau
    kerana pembaca membetulkannya dengan pantas, audio bagi tanda merah yang
    sudah dipaparkan tetap ditunaikan sekali mengikut SOP. */
 function scheduleWordCorrection(tokenIdx, delay){
+  /* TEGURAN HANYA SELEPAS MERAH: perkataan mesti bertanda "bad". */
   if(marks[tokenIdx] !== "bad") return;
+  /* Perkataan HIJAU (betul/dilangkau/Bismillah) tidak boleh ditegur lagi. */
+  if(typeof isLocked === "function" && isLocked(tokenIdx)) return;
   const targetAyah = aIdx;
   const key = `${targetAyah}:${tokenIdx}`;
-  if(correctionPlayed.has(key) || correctionQueue.some(j=>j.ayah===targetAyah && j.word===tokenIdx)) return;
+  /* Bilangan teguran mengikut tetapan "Maksimum ulangan bagi perkataan salah". */
+  if((correctionCount[key]|0) >= MAXT()) return;
+  if(correctionQueue.some(j=>j.ayah===targetAyah && j.word===tokenIdx)) return;
   correctionQueue.push({ ayah:targetAyah, word:tokenIdx });
   correctionTimer = setTimeout(pumpWordCorrections, Math.max(0, Number(delay)||0));
 }
@@ -1303,7 +1312,7 @@ function cancelWordCorrection(){
 }
 function resetWordCorrections(){
   clearTimeout(correctionTimer);
-  correctionTimer = null; correctionQueue = []; correctionPlayed.clear();
+  correctionTimer = null; correctionQueue = []; correctionPlayed.clear(); correctionCount = {};
   lastCorrectionKey = ""; lastCorrectionAt = 0;
 }
 
@@ -2300,7 +2309,7 @@ function processSpoken(text, isFinal){
   if(!current) return;
   /* Apa-apa tanda merah yang pernah dipaparkan wajib mendapat audio pembetulan,
      tanpa bergantung pada laluan enjin (wasal, latih tubi atau mod biasa). */
-  for(let i=0;i<marks.length;i++) if(marks[i] === "bad") scheduleWordCorrection(i, 0);
+  for(let i=0;i<marks.length;i++) if(marks[i] === "bad" && !isLocked(i)) scheduleWordCorrection(i, 0);
   if(!isFinal) return;
   if(cursor > before){ stallTries = {}; return; }
   if(_noJudge) return;
@@ -2580,6 +2589,40 @@ function stopUI(){
 function stopRec(){ listening=false; recRunning=false; micMuted=false; appSpeaking=false;
   clearTimeout(muteTimer); clearTimeout(failSafeTimer); clearTimeout(watchdog); if(rec){ try{rec.stop();}catch(e){} } stopUI(); }
 
+/* ============ 8b. AUTO CARI KEDUDUKAN BACAAN ============ */
+/* Bila mikrofon ditekan, app terus melompat ke ayat yang belum selesai
+   (kemajuan semasa atau rekod terakhir) dan menatal ke perkataan kuning —
+   pengguna tidak perlu skrol mencari sendiri. */
+function _ayahDone(){
+  const d = m => m==="ok" || m==="skip" || m==="bsm";
+  return marks.length > 0 && marks.every(d);
+}
+function findReadingTarget(){
+  if(!current) return 0;
+  if(!_ayahDone()) {
+    if(cursor > 0 || marks.some(m=>m)) return aIdx;          // ayat semasa belum habis
+    const rz = LS.get("tasmi.resume."+profile, null);
+    if(rz && +rz.s === +current.n && Number.isInteger(+rz.a)) {
+      return Math.max(0, Math.min(+rz.a, current.ayat.length-1));
+    }
+    return aIdx;
+  }
+  return Math.min(aIdx + 1, current.ayat.length - 1);          // ayat semasa sudah selesai
+}
+function scrollToReadingWord(){
+  const box = $("ayah-text"); if(!box) return;
+  const el = box.querySelector(".w.cur") || box.querySelector(".w.bad")
+          || box.querySelector(".cur-ay") || box;
+  try{ el.scrollIntoView({ behavior:"smooth", block:"center" }); }
+  catch(e){ const r = el.getBoundingClientRect(); window.scrollTo(0, window.scrollY + r.top - window.innerHeight/2); }
+}
+function focusReadingTarget(){
+  if(!current) return;
+  const t = findReadingTarget();
+  if(t !== aIdx){ loadAyah(t); setStatus("Menyambung bacaan pada ayat "+(t+1)+"."); }
+  setTimeout(scrollToReadingWord, 120);
+}
+
 /* ============ 9. EVENT ============ */
 $("mic").onclick = ()=>{
   try{ (actx=actx||new (window.AudioContext||window.webkitAudioContext)()).resume(); }catch(e){}
@@ -2591,7 +2634,7 @@ $("mic").onclick = ()=>{
     safeStartRec(); micUI(true); setStatus("Mikrofon dihidupkan semula. Sila teruskan bacaan.");
     return;
   }
-  if(listening){ stopRec(); } else { startRec(); }
+  if(listening){ stopRec(); } else { focusReadingTarget(); startRec(); }
 };
 $("skip").onclick = ()=>{
   const t = ayahTokens(currentAyah());
