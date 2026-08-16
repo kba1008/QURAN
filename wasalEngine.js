@@ -157,10 +157,12 @@ class QuranWasalEngine {
 
   static sub(a, b) {
     if (a === b) return 2.2;
-    if (this.mapAcoustics(a) === this.mapAcoustics(b)) return 1.7;
-    if (this.nearSound(a, b)) return 1.0 + this.memBonus(a, b) * 0.5;
-    const bonus = this.memBonus(a, b);
-    return bonus ? Math.min(1.2, -1.6 + bonus * 1.9) : -1.6;
+    /* Huruf hampir bunyi masih membantu penjajaran, tetapi tidak diberi skor
+       cukup tinggi untuk meluluskan bacaan salah. Memori adaptif lama tidak
+       lagi boleh melonggarkan semakan secara senyap. */
+    if (this.mapAcoustics(a) === this.mapAcoustics(b)) return 0.65;
+    if (this.nearSound(a, b)) return 0.25;
+    return -1.6;
   }
   static GAP_OPEN = -2.0;
   static GAP_EXT = -0.45;              // mad / sisipan panjang murah
@@ -308,11 +310,9 @@ class QuranWasalEngine {
       }
     }
     best.resumeWord = resumeWord;
-    /* Belajar daripada penjajaran yang yakin: kemas kini memori akustik */
-    if (best.confidence >= 0.62 && best.confusions) {
-      for (const [a, b] of best.confusions) this.learnPair(a, b);
-    }
-    if (best.confidence >= 0.55) this.saveMemory();
+    /* Penilaian bacaan mesti konsisten dengan toleransi pengguna. Kekeliruan
+       lama tidak dipelajari sebagai bacaan betul kerana ia boleh menyebabkan
+       kesalahan sebenar diterima pada sesi seterusnya. */
     return best;
   }
 
