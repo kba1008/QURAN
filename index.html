@@ -1457,6 +1457,11 @@ let aIdx=0, cursor=0, marks=[], listening=false, repDone=0, busy=false;
 let bestCursor = 0, bestMarks = [];
 function keepProgress(){
   for(let i=0;i<marks.length;i++) if(bestMarks[i]==="ok" || bestMarks[i]==="skip" || bestMarks[i]==="bsm") marks[i]=bestMarks[i];
+  /* Keputusan Web Speech yang tiba lewat tidak boleh mengundurkan kursor ke
+     perkataan hijau. Jika itu berlaku, penanda kuning hilang di bawah kelas
+     hijau dan bacaan selepasnya tidak lagi dinilai. */
+  cursor = Math.max(cursor, bestCursor);
+  while(cursor < marks.length && isLocked(cursor)) cursor++;
   bestMarks = marks.slice(); bestCursor = Math.max(bestCursor, cursor);
 }
 let watchdog=null;
@@ -2027,6 +2032,10 @@ function processSpokenCore(text, isFinal){
   const target = ayahTokens(currentAyah()).map(stripD);
   const sw = words(text);
   const floor = applyBsmBarrier();     // Bismillah: halangan, tidak disemak
+  /* Pertahanan kedua: kursor mesti sentiasa menunjuk perkataan kuning/merah
+     seterusnya, bukan perkataan hijau yang telah dikunci. */
+  while(cursor < target.length && isLocked(cursor)) cursor++;
+  bestCursor = Math.max(bestCursor, cursor);
 
   /* ===== ENJIN PENJAJARAN ALIRAN FONEM (bacaan bersambung) =====
      Seluruh bacaan yang didengar dijajarkan dengan aliran fonem ayat
@@ -2582,7 +2591,12 @@ async function startRec(){
       // Teks interim sering DIKEMASKINI/DIBETULKAN oleh enjin, jadi setiap kali kita
       // ulang-semak keseluruhan segmen bermula daripada keadaan sebelum segmen ini.
       if(!snaps[i] || snaps[i].a !== aIdx) snaps[i] = { a:aIdx, cursor, marks: marks.slice() };
-      if(snaps[i].cursor <= cursor){ cursor = snaps[i].cursor; marks = snaps[i].marks.slice(); }
+      if(snaps[i].cursor <= cursor){
+        cursor = Math.max(snaps[i].cursor, bestCursor);
+        marks = snaps[i].marks.slice();
+        for(let k=0;k<bestMarks.length;k++) if(bestMarks[k]==="ok" || bestMarks[k]==="skip" || bestMarks[k]==="bsm") marks[k]=bestMarks[k];
+        while(cursor < marks.length && isLocked(cursor)) cursor++;
+      }
       /* Hasil interim sentiasa berubah dan boleh berupa tekaan ayat lain.
          Paparkan apa yang didengar, tetapi warna hanya diputuskan selepas
          pelayar mengeluarkan hasil final. Ini menghalang perkataan belum dibaca
