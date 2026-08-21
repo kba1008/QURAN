@@ -6,9 +6,9 @@
 <title>Tasmi' — Semakan Bacaan Al-Quran</title>
 <meta name="description" content="Aplikasi PWA premium untuk menyemak bacaan Al-Quran secara langsung dengan pengecaman suara percuma, mod hafazan dan terjemahan Bahasa Melayu." />
 <meta name="theme-color" content="#0b1210" />
-<link rel="manifest" href="./manifest.json?v=39" />
-<link rel="icon" type="image/png" href="./icon-192.png?v=39" />
-<link rel="apple-touch-icon" href="./icon-192.png?v=39" />
+<link rel="manifest" href="./manifest.json?v=41" />
+<link rel="icon" type="image/png" href="./icon-192.png?v=41" />
+<link rel="apple-touch-icon" href="./icon-192.png?v=41" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Manrope:wght@400;600;800&display=swap" rel="stylesheet" />
@@ -667,7 +667,7 @@
 </div>
 
 <!-- Enjin fonetik Wasal (Tajwid) — perlu dimuat sebelum skrip utama -->
-<script src="./wasalEngine.js?v=39"></script>
+<script src="./wasalEngine.js?v=41"></script>
 
 <script>
 /* ============================================================
@@ -963,23 +963,33 @@ function acceptedAsrPair(a,b){
    - <0.90 : dikira mengikut jarak huruf / jarak bunyi (maks 0.88). */
 function similar(a,b){
   if(!a||!b) return 0;
+  const K = strictK();                      // 0 = sangat memaafkan, 1 = sangat ketat
   const alt=a.replace(/^ال/,""), blt=b.replace(/^ال/,"");
   if(alt===blt) return 1;
   /* Variasi dalam senarai putih diluluskan walaupun enjin menulis huruf jiran.
      Semakan ini berlaku sebelum padanan fonetik kasar dan hanya untuk token penuh. */
-  if(acceptedAsrPair(alt, blt)) return 1;
+  /* Senarai putih ASR hanya sah pada ketegasan rendah/sederhana. */
+  if(acceptedAsrPair(alt, blt)) return 1 - 0.40 * K;
   const direct = ratio(alt,blt);           // ketepatan huruf sebenar
   const pa = phono(alt), pb = phono(blt);
-  const sound = (pa === pb) ? 0.90 : Math.min(0.88, ratio(pa, pb) * 0.90);
+  const sound = (pa === pb) ? (0.98 - 0.36 * K)
+                            : ratio(pa, pb) * (0.95 - 0.25 * K);
   let sc = Math.max(direct, sound);
   /* HUKUM MAD: jika huruf mad pada perkataan sebenar tidak kedengaran
      (pembaca baca pendek), turunkan skor supaya tidak lulus dengan mudah. */
   const need = madCount(alt), got = madCount(blt);
-  if(need > got) sc = Math.max(0, sc - 0.12 * (need - got));
+  if(need > got) sc = Math.max(0, sc - (0.12 + 0.28 * K) * (need - got));
   return sc;
 }
 /* Ketegasan (%) daripada tetapan -> ambang persamaan yang diperlukan. */
 const TOL = () => Math.min(1.00, Math.max(0.10, (S.tol||20)/100));
+/* Ketegasan ternormal 0..1 — dikongsi dengan enjin wasal supaya slider
+   mengawal SELURUH rantaian semakan (huruf, fonem, gap mad, keyakinan). */
+const strictK = () => (TOL() - 0.10) / 0.90;
+function syncEngineStrictness(){
+  const E = (typeof window!=="undefined") ? window.QuranWasalEngine : null;
+  if(E && E.setStrictness) E.setStrictness(TOL());
+}
 /* --- PADANAN WASAL (bacaan bersambung 2-3 perkataan) ---
    Menggunakan wasalEngine.js: hukum Idgham Bilaghunnah/Bighunnah, Iqlab,
    Ikhfa, Alif Lam Shamsiyah, hamzah wasal + penjajaran fonem untuk ralat
@@ -992,7 +1002,8 @@ function wasalMatchSeq(spoken, list){
   if(spN.length < 2) return false;
   const vars = (E.wasalChainVariants ? E.wasalChainVariants(list)
                                      : E.wasalVariants(list[0], list[1]));
-  const need = Math.max(0.55, Math.min(0.88, TOL()));
+  syncEngineStrictness();
+  const need = TOL();   // tiada lagi had 0.88: ketegasan penuh benar-benar ketat
   for(const v of vars){
     const vN = (v||"").replace(/\s+/g,"");
     if(!vN) continue;
@@ -1006,7 +1017,7 @@ function wasalMatch(spoken, w1, w2){ return wasalMatchSeq(spoken, [w1, w2]); }
 
 /* Ambang lebih ketat untuk mengenal pasti perkataan yang SUDAH dibaca
    (elak kursor melompat kerana padanan longgar). */
-const TOL_BACK = () => Math.min(0.88, Math.max(TOL(), TOL() + 0.10));
+const TOL_BACK = () => Math.min(0.99, Math.max(TOL(), TOL() + 0.10));
 function tolLabel(v){
   return v + "% (" + (v<=30 ? "sangat memaafkan" : v<=50 ? "sangat longgar" : v<=65 ? "longgar" : v<=80 ? "sederhana" : v<=90 ? "ketat" : "sangat ketat") + ")";
 }
@@ -2046,6 +2057,7 @@ function processSpokenCore(text, isFinal){
      mengulang beberapa perkataan sebelumnya dan menyambung (wasal) melepasi
      perkataan merah itu — enjin akan mengenal aliran bacaan itu sebagai satu
      sambungan dan membetulkan markah secara automatik. */
+  syncEngineStrictness();
   if(ENG && ENG.alignReading && cursor < target.length){
     /* Pengguna sering MENGULANG beberapa perkataan hijau dahulu, kemudian
        menyambung (wasal) ke perkataan yang belum dibaca. Jadi jendela undur
@@ -2069,9 +2081,9 @@ function processSpokenCore(text, isFinal){
     }
     const avgNew = nU ? sumU / nU : 0;
     const anchored = AL && (nL > 0 || AL.startWord <= cursor);
-    const confGate = Math.min(0.50, Math.max(0.26, TOL() * 0.62));
+    const confGate = Math.max(0.26, Math.min(0.80, 0.26 + 0.54 * strictK()));
     if(AL && AL.spokenChars >= 3 && AL.confidence >= confGate && anchored && AL.advanceTo > floor){
-      const thr = Math.min(0.98, TOL());
+      const thr = TOL();          // ambang penuh: 100% = hampir sempurna
       /* Tetapan toleransi mesti kekal sama walaupun perkataan pernah salah.
          Menurunkan ambang selepas cubaan pertama menyebabkan bacaan salah
          mudah bertukar hijau walaupun pengguna memilih ketegasan tinggi. */
@@ -2086,7 +2098,7 @@ function processSpokenCore(text, isFinal){
         render();
         return;
       }
-      if(avgNew < Math.min(0.72, TOL()) && !isFinal){
+      if(avgNew < Math.min(0.72 + 0.25 * strictK(), TOL()) && !isFinal){
         for(const w of words(text)) pushHeard(w);
         _noJudge = true;
         setStatus("App sedang mendengar sambungan bacaan…");

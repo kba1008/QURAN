@@ -19,6 +19,18 @@
    ===================================================================== */
 
 class QuranWasalEngine {
+  /* ---------- 0. KETEGASAN (toleransi pengguna) ----------
+     0.10 = sangat memaafkan, 1.00 = sangat ketat (tajwid tegas).
+     Semua matriks skor, denda gap dan ambang persamaan bergantung pada nilai
+     ini supaya slider "Ketegasan semakan" benar-benar mengubah keputusan. */
+  static strictness = 0.60;
+  static setStrictness(t) {
+    const v = Number(t);
+    if (!isNaN(v)) this.strictness = Math.min(1, Math.max(0.10, v > 1 ? v / 100 : v));
+    return this.strictness;
+  }
+  static hard() { return (this.strictness - 0.10) / 0.90; }   // 0..1
+
   /* ---------- 1. Kekeliruan akustik (STT pelayar) ---------- */
   static acousticMap = {
     'ص': 'س', 'ث': 'س', 'ض': 'د', 'ظ': 'د', 'ذ': 'د',
@@ -156,16 +168,19 @@ class QuranWasalEngine {
   }
 
   static sub(a, b) {
+    const k = this.hard();
     if (a === b) return 2.2;
-    /* Huruf hampir bunyi masih membantu penjajaran, tetapi tidak diberi skor
-       cukup tinggi untuk meluluskan bacaan salah. Memori adaptif lama tidak
-       lagi boleh melonggarkan semakan secara senyap. */
-    if (this.mapAcoustics(a) === this.mapAcoustics(b)) return 0.65;
-    if (this.nearSound(a, b)) return 0.25;
-    return -1.6;
+    /* Huruf yang hanya "hampir sama bunyi" diberi ganjaran mengikut ketegasan.
+       Pada ketegasan tinggi ia menjadi DENDA: makhraj bertukar = bacaan salah. */
+    if (this.mapAcoustics(a) === this.mapAcoustics(b)) return 0.95 - 1.55 * k;
+    if (this.nearSound(a, b)) return 0.55 - 1.65 * k;
+    return -1.2 - 1.4 * k;
   }
-  static GAP_OPEN = -2.0;
-  static GAP_EXT = -0.45;              // mad / sisipan panjang murah
+  /* Denda gap (huruf gugur / disisip, mad dipendekkan) juga mengikut ketegasan */
+  static gapOpen() { return -1.6 - 1.4 * this.hard(); }
+  static gapExt() { return -0.30 - 1.10 * this.hard(); }
+  static GAP_OPEN = -2.0;              // kekal untuk keserasian API lama
+  static GAP_EXT = -0.45;
 
   /* ---------- 5. Smith–Waterman (affine gap) ---------- */
   static align(spoken, target) {
@@ -175,6 +190,7 @@ class QuranWasalEngine {
     // M = padanan, X = gap dalam target (sisipan pengguna), Y = gap dalam spoken (gugur)
     let Mp = new Float64Array(m + 1), Xp = new Float64Array(m + 1), Yp = new Float64Array(m + 1);
     Xp.fill(NEG); Yp.fill(NEG);
+    const GO = this.gapOpen(), GE = this.gapExt();
     const ptr = new Uint8Array((n + 1) * (m + 1));   // 0 stop,1 diag,2 up(X),3 left(Y)
     let best = 0, bi = 0, bj = 0;
 
@@ -186,8 +202,8 @@ class QuranWasalEngine {
         const s = this.sub(sa, target.charAt(j - 1));
         const diag = Math.max(Mp[j - 1], Xp[j - 1], Yp[j - 1], 0) + s;
         Mc[j] = Math.max(0, diag);
-        Xc[j] = Math.max(Mp[j] + this.GAP_OPEN, Xp[j] + this.GAP_EXT);      // makan huruf spoken
-        Yc[j] = Math.max(Mc[j - 1] + this.GAP_OPEN, Yc[j - 1] + this.GAP_EXT); // makan huruf target
+        Xc[j] = Math.max(Mp[j] + GO, Xp[j] + GE);      // makan huruf spoken
+        Yc[j] = Math.max(Mc[j - 1] + GO, Yc[j - 1] + GE); // makan huruf target
         let bestVal = Mc[j], code = 1;
         if (Xc[j] > bestVal) { bestVal = Xc[j]; code = 2; }
         if (Yc[j] > bestVal) { bestVal = Yc[j]; code = 3; }
@@ -201,6 +217,7 @@ class QuranWasalEngine {
 
     // Traceback ringkas untuk kutip padanan setiap posisi target
     const matched = new Float64Array(m);
+    const missed = new Float64Array(m);      // fonem sasaran salah / tidak dibaca
     const confusions = [];
     let i = bi, j = bj, startJ = bj;
     let guard = (n + m) * 2;
@@ -211,11 +228,12 @@ class QuranWasalEngine {
         const sa = spoken.charAt(i - 1), tb = target.charAt(j - 1);
         const s = this.sub(sa, tb);
         if (s > 0) { matched[j - 1] = s / 2.2; if (sa !== tb) confusions.push([sa, tb]); }
+        else { missed[j - 1] = 1; confusions.push([sa, tb]); }
         startJ = j; i--; j--;
       } else if (code === 2) { i--; }
-      else { startJ = j; j--; }
+      else { missed[j - 1] = 1; startJ = j; j--; }   // huruf sasaran tidak kedengaran
     }
-    return { score: best, endJ: bj, startJ: Math.max(1, startJ), matched, confusions };
+    return { score: best, endJ: bj, startJ: Math.max(1, startJ), matched, missed, confusions };
   }
 
   /* ---------- 6. API utama: penjajaran bacaan bersambung ---------- */
@@ -239,23 +257,28 @@ class QuranWasalEngine {
     if (!al) return null;
 
     /* Skor setiap perkataan = purata padanan fonemnya */
-    const tot = {}, hit = {};
+    const tot = {}, hit = {}, miss = {};
     for (let k = 0; k < T.owner.length; k++) {
       const w = T.owner[k];
       tot[w] = (tot[w] || 0) + 1;
       hit[w] = (hit[w] || 0) + (al.matched[k] || 0);
+      miss[w] = (miss[w] || 0) + ((al.missed && al.missed[k]) || 0);
     }
+    /* Setiap fonem yang salah atau tertinggal DIDENDA mengikut ketegasan.
+       Tanpa denda ini, satu huruf salah dalam perkataan panjang masih
+       menghasilkan purata tinggi dan bacaan salah dikira betul. */
+    const missPenalty = 0.6 + 1.6 * this.hard();
     const startWord = T.owner[al.startJ - 1];
     const endWord = T.owner[al.endJ - 1];
 
     const wordScores = {};
     for (let w = startWord; w <= endWord; w++) {
       if (!tot[w]) continue;
-      wordScores[w] = hit[w] / tot[w];
+      wordScores[w] = Math.max(0, (hit[w] - missPenalty * (miss[w] || 0)) / tot[w]);
     }
 
     /* Perkataan terakhir mungkin separuh dituturkan — jangan sahkan penuh */
-    const lastFull = wordScores[endWord] >= 0.75;
+    const lastFull = wordScores[endWord] >= (0.60 + 0.35 * this.hard());
     const advanceTo = lastFull ? endWord + 1 : endWord;
 
     const covered = al.endJ - al.startJ + 1;
@@ -320,16 +343,22 @@ class QuranWasalEngine {
   static removeTashkeel(text) { return this.normalize(text); }
 
   static getSimilarityScore(s1, s2) {
-    const a = this.mapAcoustics(this.normalize(s1)).replace(/\s+/g, "");
-    const b = this.mapAcoustics(this.normalize(s2)).replace(/\s+/g, "");
+    const k = this.hard();
+    /* Pemetaan akustik (ص->س, ق->ك, ...) hanya digunakan bila ketegasan rendah.
+       Pada ketegasan tinggi, huruf sebenar dibandingkan supaya tukar makhraj
+       tidak lagi dikira betul. */
+    const soft = (t) => (k < 0.5 ? this.mapAcoustics(this.normalize(t)) : this.normalize(t));
+    const a = soft(s1).replace(/\s+/g, "");
+    const b = soft(s2).replace(/\s+/g, "");
     if (a === b) return a ? 1 : 0;
     if (!a.length || !b.length) return 0;
+    const nearCost = 0.25 + 0.75 * k;      // huruf hampir bunyi: makin ketat makin mahal
     let prev = new Array(a.length + 1);
     for (let j = 0; j <= a.length; j++) prev[j] = j;
     for (let i = 1; i <= b.length; i++) {
       const cur = [i];
       for (let j = 1; j <= a.length; j++) {
-        const cost = b.charAt(i - 1) === a.charAt(j - 1) ? 0 : (this.nearSound(b.charAt(i - 1), a.charAt(j - 1)) ? 0.4 : 1);
+        const cost = b.charAt(i - 1) === a.charAt(j - 1) ? 0 : (this.nearSound(b.charAt(i - 1), a.charAt(j - 1)) ? nearCost : 1);
         cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
       }
       prev = cur;
@@ -376,7 +405,7 @@ class QuranWasalEngine {
   /* Kekal untuk keserasian: pengesahan pendek berasaskan penjajaran */
   static verifyReading(userSpokenText, currentIndex, wordList) {
     const r = this.alignReading(userSpokenText, wordList, currentIndex, { back: 2, ahead: 6 });
-    if (!r || r.confidence < 0.5) return { isCorrect: false, advanceBy: 0, mode: "FAILED" };
+    if (!r || r.confidence < (0.35 + 0.35 * this.hard())) return { isCorrect: false, advanceBy: 0, mode: "FAILED" };
     const adv = r.advanceTo - currentIndex;
     if (adv <= 0) {
       return r.startWord < currentIndex
