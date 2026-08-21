@@ -587,7 +587,7 @@
         <div class="fld">
           <label>Ketegasan semakan (toleransi sebutan): <b id="tol-val">20%</b></label>
           <input type="range" id="set-tol" min="10" max="100" step="1" />
-          <div class="hint">Semakin tinggi, semakin tepat sebutan diperlukan. 10–30% sangat memaafkan (sesuai untuk hafiz/bacaan laju); 40–65% longgar; 80%+ ketat; 100% menuntut huruf betul-betul tepat.</div>
+          <div class="hint">Semakin tinggi, semakin tepat sebutan diperlukan. 10–30% sangat memaafkan (sesuai untuk hafiz/bacaan laju); 40–65% longgar; 65%+ senarai putih pengecaman suara dimatikan (ق/ك, ص/س, ط/ت dikira salah); <b>90%+ = Mod Tahqiq: tiada auto-lulus, perkataan kekal merah sehingga betul</b>. Nota amanah: pengecaman suara pelayar tidak mendengar baris (harakat) &amp; panjang mad dengan tepat, jadi semakan ini adalah bantuan, bukan ganti talaqqi dengan guru bertauliah.</div>
         </div>
       </div>
     </details>
@@ -969,16 +969,22 @@ function similar(a,b){
   /* Variasi dalam senarai putih diluluskan walaupun enjin menulis huruf jiran.
      Semakan ini berlaku sebelum padanan fonetik kasar dan hanya untuk token penuh. */
   /* Senarai putih ASR hanya sah pada ketegasan rendah/sederhana. */
-  if(acceptedAsrPair(alt, blt)) return 1 - 0.40 * K;
+  /* Senarai putih ASR hanya sah pada ketegasan RENDAH. Mulai 65% ke atas ia
+     DITOLAK sepenuhnya kerana makhraj yang bertukar (ق→ك, ص→س, ط→ت, ذ→د)
+     adalah kesalahan sebutan yang sebenar, bukan sekadar ralat pelayar. */
+  if(K < 0.65 && acceptedAsrPair(alt, blt)) return 1 - 0.40 * K;
   const direct = ratio(alt,blt);           // ketepatan huruf sebenar
   const pa = phono(alt), pb = phono(blt);
-  const sound = (pa === pb) ? (0.98 - 0.36 * K)
-                            : ratio(pa, pb) * (0.95 - 0.25 * K);
+  const sound = (pa === pb) ? (0.98 - 0.62 * K)
+                            : ratio(pa, pb) * (0.95 - 0.55 * K);
   let sc = Math.max(direct, sound);
+  /* MOD TAHQIQ (ketegasan >= 90%): hanya huruf yang benar-benar sama diterima.
+     Padanan "hampir sama bunyi" tidak boleh lagi meluluskan bacaan. */
+  if(K >= 0.89) sc = (direct >= 0.999) ? 1 : Math.min(sc, 0.80 * direct);
   /* HUKUM MAD: jika huruf mad pada perkataan sebenar tidak kedengaran
      (pembaca baca pendek), turunkan skor supaya tidak lulus dengan mudah. */
   const need = madCount(alt), got = madCount(blt);
-  if(need > got) sc = Math.max(0, sc - (0.12 + 0.28 * K) * (need - got));
+  if(need > got) sc = Math.max(0, sc - (0.15 + 0.45 * K) * (need - got));
   return sc;
 }
 /* Ketegasan (%) daripada tetapan -> ambang persamaan yang diperlukan. */
@@ -1019,7 +1025,8 @@ function wasalMatch(spoken, w1, w2){ return wasalMatchSeq(spoken, [w1, w2]); }
    (elak kursor melompat kerana padanan longgar). */
 const TOL_BACK = () => Math.min(0.99, Math.max(TOL(), TOL() + 0.10));
 function tolLabel(v){
-  return v + "% (" + (v<=30 ? "sangat memaafkan" : v<=50 ? "sangat longgar" : v<=65 ? "longgar" : v<=80 ? "sederhana" : v<=90 ? "ketat" : "sangat ketat") + ")";
+  const nama = v<=30 ? "sangat memaafkan" : v<=50 ? "sangat longgar" : v<=65 ? "longgar" : v<=80 ? "sederhana" : v<=89 ? "ketat" : "TAHQIQ — tiada auto-lulus";
+  return v + "% (" + nama + ")";
 }
 
 /* ============ 4. BUNYI BIP ============ */
@@ -1489,20 +1496,41 @@ let _noJudge = false;
 function triesOf(i){ return wordTries[i] | 0; }
 function addTry(i){ return (wordTries[i] = triesOf(i) + 1); }
 function autoPass(i, msg){
+  /* MOD TAHQIQ: perkataan TIDAK PERNAH diluluskan secara automatik. Ia kekal
+     merah sehingga dibaca dengan betul. */
+  if(tahqiqMode()){
+    marks[i] = "bad";
+    setStatus("Mod tahqiq (ketegasan " + Math.round(TOL()*100) + "%): perkataan ini kekal merah sehingga dibaca dengan tepat.");
+    return;
+  }
   /* Selepas had teguran dalam Tetapan dicapai, perkataan itu DILANGKAU
      secara automatik (hijau-langkau) dan tidak boleh ditegur lagi. */
   marks[i] = "skip"; fixedOnce[i] = true; wordTries[i] = 0;
   drillWord = -1; badTries = 0; cancelWordCorrection();
   const key = `${aIdx}:${i}`; correctionCount[key] = 99;   // kunci: tiada teguran lagi
   correctionQueue = correctionQueue.filter(j=>!(j.ayah===aIdx && j.word===i));
-  setStatus(msg || `Sudah ditegur ${MAXT()} kali — perkataan itu dilangkau automatik. Teruskan bacaan.`);
+  setStatus(msg || `Sudah ditegur ${isFinite(MAXT())?MAXT():"beberapa"} kali — perkataan itu dilangkau automatik. Teruskan bacaan.`);
 }
 /* Selepas pengguna mengulang perkataan yang sama LEBIH 3 kali, kemungkinan besar
    ralat berpunca daripada mikrofon / pengecaman pelayar, bukan bacaan pengguna.
    Maka bacaan itu DILULUSKAN supaya pembaca tidak tersangkut. */
 /* Bilangan teguran maksimum boleh diubah dalam Tetapan (1-5).
    Selepas melebihi had ini, perkataan dilangkau (skip) automatik. */
-function MAXT(){ const v = +(S && S.maxTries); return (v>=1 && v<=5) ? v : 1; }
+function MAXT(){
+  const v = +(S && S.maxTries); const base = (v>=1 && v<=5) ? v : 1;
+  const t = TOL();
+  /* PUNCA UTAMA "semua betul": auto-lulus (skip) meluluskan perkataan salah
+     selepas beberapa teguran, jadi slider ketegasan seolah-olah tiada kesan.
+     Mulai sekarang had teguran itu sendiri tunduk kepada ketegasan:
+       >= 90%  : MOD TAHQIQ — tiada auto-lulus langsung (Al-Quran tidak boleh
+                 diluluskan sedangkan bacaan belum tepat)
+       70–89%  : had teguran dilanjutkan
+       < 70%   : seperti tetapan pengguna (mesra hafiz/bacaan laju) */
+  if(t >= 0.90) return Infinity;
+  if(t >= 0.70) return base + 2;
+  return base;
+}
+function tahqiqMode(){ return TOL() >= 0.90; }
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 var _statusToastTimer = null;

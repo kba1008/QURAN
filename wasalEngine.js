@@ -287,7 +287,7 @@ class QuranWasalEngine {
     return {
       startWord, endWord, advanceTo, wordScores, confidence,
       coveredChars: covered, spokenChars: spoken.length, score: al.score,
-      confusions: al.confusions || [],
+      confusions: al.confusionss || [],
       norm: al.score / Math.max(1, spoken.length * 2.2),
       windowFrom: from, windowTo: to
     };
