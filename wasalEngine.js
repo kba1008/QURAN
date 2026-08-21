@@ -1,5 +1,5 @@
 /* =====================================================================
-   QuranWasalEngine v3 — "Continuous Phoneme Stream Alignment"
+   QuranWasalEngine v4 — "Continuous Phoneme Stream Alignment"
    ---------------------------------------------------------------------
    Pendekatan baharu (tidak bergantung kepada pemisahan perkataan STT):
 
@@ -287,7 +287,7 @@ class QuranWasalEngine {
     return {
       startWord, endWord, advanceTo, wordScores, confidence,
       coveredChars: covered, spokenChars: spoken.length, score: al.score,
-      confusions: al.confusionss || [],
+      confusions: al.confusions || [],
       norm: al.score / Math.max(1, spoken.length * 2.2),
       windowFrom: from, windowTo: to
     };
@@ -366,6 +366,22 @@ class QuranWasalEngine {
     return Math.max(0, (Math.max(a.length, b.length) - prev[a.length]) / Math.max(a.length, b.length));
   }
   static calculateSimilarity(a, b) { return this.getSimilarityScore(a, b); }
+
+  /* Gerbang kata untuk mod ketat. Pada >=90%, tiada local/fuzzy alignment:
+     rangka huruf Arab selepas normalisasi wajib sama sepenuhnya. Pada >=70%,
+     panjang dan dua huruf terakhir wajib sama bagi menghalang hujung terpotong. */
+  static strictTokenMatch(spoken, target) {
+    const a = this.normalize(spoken).replace(/\s+/g, "");
+    const b = this.normalize(target).replace(/\s+/g, "");
+    if (!a || !b) return false;
+    if (this.strictness >= 0.90) return a === b;
+    if (this.strictness >= 0.70) {
+      if (a.length !== b.length) return false;
+      const n = Math.min(2, a.length, b.length);
+      if (a.slice(-n) !== b.slice(-n)) return false;
+    }
+    return this.getSimilarityScore(a, b) >= this.strictness;
+  }
 
   static generateWasalPhonetic(word1, word2, isWaqaf = false) {
     if (isWaqaf || !word2) {
